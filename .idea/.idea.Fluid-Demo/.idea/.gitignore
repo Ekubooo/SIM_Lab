@@ -1,0 +1,10 @@
+# default ignore
+/shelf/
+/workspace.xml
+# Rider ignore
+/modules.xml
+/contentModel.xml
+/projectSettingsUpdater.xml
+/.idea.Fluid-Demo.iml
+# editor HTTP client request
+/httpRequests/
