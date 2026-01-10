@@ -15,12 +15,17 @@ groupshared uint Temp[ITEMS_PER_GROUP];
 [numthreads(GROUP_SIZE, 1, 1)]
 void BlockScan(uint threadGlobal : SV_DispatchThreadID, uint threadLocal : SV_GroupThreadID, uint group : SV_GroupID)
 {
-	uint localA = threadLocal * 2 + 0;
+	// threadGlobal	= Particle Index / 2		:	(0 ~ 131072)					
+	// threadLocal	= Index in Block(array) / 2 :	(0 ~ 256) or (0 ~ GROUP_SIZE)
+	// group		= Block(array) number		:	(0 ~ 512) or (0 ~ numGroups)
+	
+	uint localA = threadLocal * 2 + 0;		// Index in Block(array) : (0 ~ 512-1)
 	uint localB = threadLocal * 2 + 1;
-	uint globalA = threadGlobal * 2 + 0;
+	uint globalA = threadGlobal * 2 + 0;	// Particle Index		 : (0 ~ 262144-1)
 	uint globalB = threadGlobal * 2 + 1;
 
-	bool hasA = globalA < itemCount;
+	// Flag of range
+	bool hasA = globalA < itemCount;		
 	bool hasB = globalB < itemCount;
 
 	// Store the current pair in shared memory (store 0 if out of bounds)
@@ -32,11 +37,14 @@ void BlockScan(uint threadGlobal : SV_DispatchThreadID, uint threadLocal : SV_Gr
 	uint numActiveThreads;
 
 	for (numActiveThreads = GROUP_SIZE; numActiveThreads > 0; numActiveThreads /= 2)
-	{
+	{	// for d = 0 to log_2(n) – 1 (Tree high loop / d loop)
+		
 		GroupMemoryBarrierWithGroupSync();
+		if (threadLocal < numActiveThreads)		
+		{	// ((0-255) < (256 -> 128 -> ... 1)): summation per d (tree layer)
+			// for all k = 0 to n – 1 by 2^(d+1) **in parallel** do (k loop)
 
-		if (threadLocal < numActiveThreads)
-		{
+			// 
 			uint indexA = offset * (localA + 1) - 1;
 			uint indexB = offset * (localB + 1) - 1;
 			Temp[indexB] = Temp[indexA] + Temp[indexB];
@@ -48,8 +56,9 @@ void BlockScan(uint threadGlobal : SV_DispatchThreadID, uint threadLocal : SV_Gr
 	if (threadLocal == 0)
 	{
 		// Store total count in group sums, so that individual group scans can later be easily combined
-			// **!** now GroupSums[group] is IScan.
+		// **!** now GroupSums[group] is IScan.
 		GroupSums[group] = Temp[ITEMS_PER_GROUP - 1];
+		
 		// Set the total count stored in temp to 0 as it is not used in an exlusive scan
 		Temp[ITEMS_PER_GROUP - 1] = 0;
 	}
@@ -79,9 +88,15 @@ void BlockScan(uint threadGlobal : SV_DispatchThreadID, uint threadLocal : SV_Gr
 [numthreads(GROUP_SIZE, 1, 1)]
 void BlockCombine(uint threadGlobal : SV_DispatchThreadID, uint group : SV_GroupID)
 {
-	uint globalA = threadGlobal * 2 + 0;
-	uint globalB = threadGlobal * 2 + 1;
+	// threadGlobal	= Particle Index / 2	:	(0 ~ 131072)
+	// group		= Block(array) number	:	(0 ~ 512) or (0 ~ numGroups)
+	
+	uint globalA = threadGlobal * 2 + 0;	// Particle Index	: (0 ~ 262144-1)
+	uint globalB = threadGlobal * 2 + 1;	// Particle Index	: (0 ~ 262144-1)
 
+	// For now : Elements[] is LocalOffset, GroupSums is GlobalOffset
 	if (globalA < itemCount) Elements[globalA] += GroupSums[group];
 	if (globalB < itemCount) Elements[globalB] += GroupSums[group];
+
+	// end of
 }

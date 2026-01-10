@@ -1,9 +1,7 @@
-## SPH 2D
+## SPH GPU
 - TODO: 
     - rendering part.
-    - Bitonic sort CS impl reading.
-    - recap of 5440 Radix and counting?
-    - GPU Radix.
+    - Bitonic sort CS impl.
 
 - Overall process of SPH
     ```
@@ -62,6 +60,14 @@
     END RunSpatial();
       
     ```
+    - data example 
+    ```
+    INDEX: 2  5  7  0  1  6  3  4  8  9  
+    C_KEY:[2, 2, 2, 3, 6, 6, 9, 9, 9, 9]
+    START:[∞, ∞, 0, 3, ∞, ∞, 4, ∞, ∞, 6] 
+    // to be continue here...
+    ```
+
 
 - GPU sort process
     ```
@@ -72,7 +78,7 @@
             InputItems.INIT();
         Count.Kernel;
             InterlockedAdd(Counts[key], 1);
-        scan.Run();
+        scan.Run();     // Counts now is offset/position of ordered array
         ScatterOutputs.Kernel;
             InterlockedAdd(Counts[key], 1, retIndex);   // conflicit avoid
         CopyBack.Kernel;
@@ -83,15 +89,104 @@
 
 - Scan process
     ```
-    scan()
+    scan.INIT
         Helper.LoadComputeShader();
     scan.Run()
         cs.Set();
         BlockScan.Kernel;
-        if numGroups > 1    // Recursive Scan of different block
+        if numGroups > 1    // Recursive Scan block layer
             scan.Run(groupSumBuffer);
             cs.Set();
             BlockCombine.Kernel;
         END if
     END Run()
+    ```
+
+- SCAN Example process for 262144 particles
+    ```
+    Scan.Run(Elements)
+        int numGroups1 = Elements.count / 2 / 256 ;   
+            // 256 thread, 1 sum each, so numGroups1 = 512.
+        Dictionary.add(512, BufferGS1);  // Buffer pool, size = 512
+        cs.SetBuffer(Elements/BufferGS1/count);
+        cs.Dispatch(scanKernel, numGroups1/*512*/, 1, 1);     
+            // 512 gorups,  256 thread each
+        
+        BlockScan.kernel        // in block, 1 of 512 block(array)
+            INDEX and FLAG;
+            groupshared Temp[] = FLAG ? Elements[] : 0;
+
+            UP_Sweep()
+                Offset = 1;     // distance of Destination
+                // d loop
+                For : Act = GROUP_SIZE to 1 by Act/=2 : (256->128->...->2->1)  
+                    GroupBarrier();     //  synchronization
+
+                    // ((0-255) < (256->128 ->...1)): summation per d (tree layer)    
+                    if (in_Limmit)      // (k loop in parallel) 
+                        INDEX A and B by Offset;   // see google doc
+                        Temp[B] = Temp[A] + Temp[B]; 
+                    Offset *= 2;
+                END For (d loop)
+                if (threadLocal == 0) 
+                    // Temp[last] is IScan
+                    // now the IScan of current block is done
+                    BufferGS1[blockNum] = Temp[last]; 
+                    Temp[last] SET 0;
+                End if  
+            END UP_Sweep()
+
+            DOWN_Sweep()
+                For : Act = 1 to GROUP_SIZE by Act*=2 : (1->2->...->128->256)
+                    GroupBarrier();     // synchronization
+                    Offset /= 2;
+
+                    // ((0-255) < (1...->128->256)): swap per d (tree layer)    
+                    if (in_Limmit)      // (k loop in parallel) 
+                        INDEX A and B by Offset;   // see google doc
+                        SWAP Temp[];
+                END For (d loop)
+            END DOWN_Sweep()
+
+            GroupBarrier();             // synchronization
+
+            // Elements is pIndex array
+            WRITEBACK: Elements[pIndex] = FLAG ? Temp[pIndex] : 0;
+        END BlockScan.kernel
+
+        // now have: Elements(EScan : inter-block order) and BufferGS1
+        
+        if numGroups1 > 1               // 512 > 1
+            // upper 
+            Scan.Run(BufferGS1)
+                int numGroups2 = 512 / 2 / 256 = 1;
+                Dictionary.add(1, BufferGS2)         // size = 1
+                cs.SetBuffer(BufferGS1/BufferGS2/count);
+                cs.Dispatch(scanKernel, numGroups2/* 1 */, 1, 1);
+
+                // now have: BufferGS1(EScan: order in GS1) and GS2(uint element sum(value))
+                // GS2 maybe for upper layer?
+
+                if numGroups2/* 1 */ > 1 ? {...}    // no upper layer, out.
+            END Scan.Run(BufferGS1)
+
+            // now have: 
+            // Elements(512 local(512) prefix sum)
+            // BufferGS1(block prefix sum), BufferGS1;
+            cs.SetBuffer(Elements/BufferGS1/count);
+            cs.Dispatch(combineKernel, numGroups1/*512*/ , 1, 1);  
+ 
+            BlockCombine.kernel
+                // one thread handle 2 element;
+                // so 131072 thread handle 262144 particles
+                INDEX_A = SV_DispatchThreadID * 2;      
+                INDEX_B = SV_DispatchThreadID * 2 + 1;      
+                    
+                // For now : Elements[] is LocalOffset, GroupSums is GlobalOffset
+                if (INDEX.valid) Elements[INDEX_A] += BufferGS1[SV_GroupID]
+                if (INDEX.valid) Elements[INDEX_B] += BufferGS1[SV_GroupID]
+            END BlockCombine.kernel
+            // Now Elements[262144] is overall offset/position for scatter.
+        END if
+
     ```
