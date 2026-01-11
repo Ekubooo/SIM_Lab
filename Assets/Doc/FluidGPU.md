@@ -16,7 +16,12 @@
   
                 RunSimStep()
                     externalForces.Kernel;
-                    RunSpatial();   // Process
+
+                    RunSpatial()
+                        gpuSort.Run()               // pIndex, keyIndex
+                        spatialOffsetsCalc.Run()    // startIndex
+                    END RunSpatial()
+
                     density.Kernel;
                     pressure.Kernel;
                     viscosity.Kernel;
@@ -26,7 +31,7 @@
                 // detail for Phy standard (See Q&A for details).
                 // not be used yet (using by 3D Foam yet).
 				SimulationStepCompleted?.Invoke();
-            END ForLoop;
+            END For Loop;
         END RunSimulationFrame();
         HandleInput();
     END Update();
@@ -38,7 +43,7 @@
         UpdateSpatialHash.Kernel;
 
         spatialHash.Run()
-            gpuSort.Run() 
+            gpuSort.Run(items[], keys[]) 
                 cs.SetBuffer();
                 ClearCounts.Kernel;
                 Count.Kernel;
@@ -49,7 +54,7 @@
                 CopyBack.Kernel;
             END gpuSort.Run()
 
-            spatialOffsetsCalc.Run()
+            spatialOffsetsCalc.Run(keys[], Offset[])
                 init?.Kernel;
                 offsets.Kernel;
             END spatialOffsetsCalc.Run();
@@ -62,10 +67,10 @@
     ```
     - data example 
     ```
-    INDEX: 2  5  7  0  1  6  3  4  8  9  
-    C_KEY:[2, 2, 2, 3, 6, 6, 9, 9, 9, 9]
-    START:[∞, ∞, 0, 3, ∞, ∞, 4, ∞, ∞, 6] 
-    // to be continue here...
+    PINDEX:  2  5  7  0  1  6  3  4  8  9  
+    C_KEY:  [2, 2, 2, 3, 6, 6, 9, 9, 9, 9]
+    START:  [∞, ∞, 0, 3, ∞, ∞, 4, ∞, ∞, 6] 
+    // to be continue here... ?
     ```
 
 
@@ -190,3 +195,53 @@
         END if
 
     ```
+
+- SpatialOffsetCalculator process
+    ```
+    spatialOffsetsCalc.Run()
+        init?.Kernel;
+            Boundary Check;
+            // INIT **StartIndex(Offset)** as PNum(means invalid)
+            Offset[].SET(∞);    
+        END init?.Kernel;
+
+        offsets.Kernel;     // 256 thread as befor
+            Boundary Check;
+            Offset[key[i]] = key[i] != key[i-1] ? i : ∞;
+        END offsets.Kernel;
+    END spatialOffsetsCalc.Run();
+    ```
+
+- SH lookup process
+    - callback style
+    ```
+    getNeighbor(pos, () =>
+    {
+        Neighbor.SmoothingKernelFunc();
+    });
+    ```
+
+    - lookup process (Shader version)
+    ```
+    getNeighbor()
+        Foreach : round cells
+            GET KEY and START_INDEX;
+
+            // loop all particles in curr cell
+            WHILE SIndex++ < PNum       
+                if (key_out_of_cell) BREAK;
+                if (out_of_radius) CONTINUE;
+                Neighbor.SmoothingKernelFunc();  
+            END WHILE
+        END Foreach
+    END getNeighbor()
+    ```
+
+
+
+
+
+
+
+
+
