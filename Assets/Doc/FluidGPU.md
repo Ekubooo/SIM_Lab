@@ -70,11 +70,10 @@
     PINDEX:  2  5  7  0  1  6  3  4  8  9  
     C_KEY:  [2, 2, 2, 3, 6, 6, 9, 9, 9, 9]
     START:  [∞, ∞, 0, 3, ∞, ∞, 4, ∞, ∞, 6] 
-    // to be continue here... ?
     ```
 
 
-- GPU sort process
+- GPU Counting sort process
     ```
     gpuSort.Run() 
         cs.Set();
@@ -91,6 +90,38 @@
             InputKeys.WRITE(SortedKeys);
     END gpuSort.Run()
     ```
+
+
+- GPU 4-bit Radix sort process (error)
+    ```
+    gpuSort.Run() 
+        cs.Set();
+        ClearCounts.Kernel 
+            Counts.INIT();
+            InputItems.INIT();
+        END ClearCounts.Kernel
+
+        For i = 1 to 8  (32 radix sort for 8 pass)
+            RadixCount.Kernel
+                //(4-bit as 16 buckets)
+                [Unroll(16)] For j = 0 to 15  
+                    if (equal_bit) bitBucket[i * PNum + id.x] = 1;
+            END RadixCount.Kernel
+        END For
+
+        // 16 times scan or 1 huge scan?
+        scan.Run();     // Counts now is offset/position of ordered array
+
+        // to be continue here...
+        ScatterOutputs.Kernel;
+            InterlockedAdd(Counts[key], 1, retIndex);   // conflicit avoid
+        CopyBack.Kernel;
+            InputItems.WRITE(SortedItems);
+            InputKeys.WRITE(SortedKeys);
+    END gpuSort.Run()
+    ```
+
+
 
 - Scan process
     ```

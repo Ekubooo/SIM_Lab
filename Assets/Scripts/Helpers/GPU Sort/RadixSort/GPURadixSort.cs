@@ -71,6 +71,21 @@ namespace Seb.GPUSorting
 			scan.Run(countsBuffer);
 			ComputeHelper.Dispatch(cs, count, kernelIndex: ScatterOutputsKernel);
 			ComputeHelper.Dispatch(cs, count, kernelIndex: CopyBackKernel);
+			
+			// ---- Radix Process ----
+			/*
+			ComputeHelper.Dispatch(cs, count, kernelIndex: ClearCountsKernel);
+			
+			for (int i = 0; i < 8; i++)	// 8-pass for 32-bit uint
+			{
+				ComputeHelper.Dispatch(cs, count, kernelIndex: RadixCounts);
+			}
+		
+			scan.Run(countsBuffer);		// Scan 16 buckets (?) how?	
+										// 16 times scan or 1 huge scan?
+			ComputeHelper.Dispatch(cs, count, kernelIndex: ScatterOutputsKernel);
+			ComputeHelper.Dispatch(cs, count, kernelIndex: CopyBackKernel);
+			*/
 		}
 
 		public void Release()

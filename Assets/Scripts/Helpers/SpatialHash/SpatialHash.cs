@@ -34,6 +34,12 @@ namespace Seb.Helpers
 		// So to look up where the '6' keys start for instance, Offsets[6] gives the answer (4).
 		// Finally, the Index buffer will contain the mapping of original unsorted keys to the sorted version.
 		// So, to sort any buffer in corresponding fashion, one can do: Sorted[i] = Unsorted[Indices[i]]
+		
+		// SpatialIndices BEFOR: 1, 2, 3... PNum
+		// SpatialIndices AFTER: Order by SpatialKeys;
+		// SpatialKeys	  BEFOR: Unorder
+		// SpatialKeys	  AFTER: Order by SpatialKeys value;
+		
 		public void Run()
 		{
 			gpuSort.Run(SpatialIndices, SpatialKeys, (uint)(SpatialKeys.count - 1));
