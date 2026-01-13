@@ -78,6 +78,7 @@ namespace Seb.GPUSorting
 			
 			for (int i = 0; i < 8; i++)	// 8-pass for 32-bit uint
 			{
+				cs.SetInt(ID_currIteration, i);		// not include yet
 				ComputeHelper.Dispatch(cs, count, kernelIndex: RadixCounts);
 			}
 		

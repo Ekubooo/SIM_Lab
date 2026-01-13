@@ -19,12 +19,13 @@ RWStructuredBuffer<uint> Counts;
 RWStructuredBuffer<uint> bitBucket;
 
 uint numInputs;
-uint CurrIteration;		// not pass-int yet
+uint currIteration;		// not pass-int yet
 
 static const int GroupSize = 256;
 
 uint get4Bits(uint num, int i)
 {
+	// i is current iteration(pass)
 	return ((num >> i*4) & 0xf);
 }
 
@@ -53,7 +54,7 @@ void RadixCounts(uint3 id : SV_DispatchThreadID)
 	if (id.x >= numInputs) return;
 	
 	// take curr 4-bit
-	uint currBit = get4Bits(InputKeys[id.x] ,CurrIteration);
+	uint currBit = get4Bits(InputKeys[id.x] ,currIteration);
 	
 	// deal with 4-bit (16 buckets)
 	[unroll(RADIX_R)]
