@@ -80,7 +80,7 @@
         ClearCounts.Kernel;
             Counts.INIT();
             InputItems.INIT();
-        Count.Kernel;
+        Count.Kernel;   // count for 1 bucket
             InterlockedAdd(Counts[key], 1);
         scan.Run();     // Counts now is offset/position of ordered array
         ScatterOutputs.Kernel;
@@ -97,31 +97,23 @@
     gpuSort.Run() 
         cs.Set();
         ClearCounts.Kernel 
-            Counts.INIT();
-            InputItems.INIT();
-        END ClearCounts.Kernel
 
-        For i = 1 to 8  (32 radix sort for 8 pass)
+        For i = 1 to 8                  // uint case
             RadixCount.Kernel
-                //(4-bit as 16 buckets)
-                [Unroll(16)] For j = 0 to 15  
-                    if (equal_bit) bitBucket[i * PNum + id.x] = 1;
+                [Unroll(16)] For j = 0 to 15  // 4-bit as 16 bucket
+                    if (bit == j) bitBucket[i * PNum + id.x] = 1;   // bitBucket[?]
             END RadixCount.Kernel
+            scan.Run();                 // scan 16 buckets?
+            ScatterOutputs.Kernel;      // (?change)
+            CopyBack.Kernel;            // (?change)
         END For
 
-        // 16 times scan or 1 huge scan?
-        scan.Run();     // Counts now is offset/position of ordered array
-
-        // to be continue here...
-        ScatterOutputs.Kernel;
-            InterlockedAdd(Counts[key], 1, retIndex);   // conflicit avoid
-        CopyBack.Kernel;
-            InputItems.WRITE(SortedItems);
-            InputKeys.WRITE(SortedKeys);
     END gpuSort.Run()
     ```
 
-
+    ```
+    
+    ```
 
 - Scan process
     ```

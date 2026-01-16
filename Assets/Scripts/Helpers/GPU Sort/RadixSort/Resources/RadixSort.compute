@@ -15,7 +15,7 @@ RWStructuredBuffer<uint> SortedKeys;
 
 RWStructuredBuffer<uint> Counts;
 
-// 16 bucket for 4-bit (not set yet)
+// 16 bucket for 4-bit (not set yet) (16 * PNum of uint)
 RWStructuredBuffer<uint> bitBucket;
 
 uint numInputs;
@@ -49,7 +49,7 @@ void CalculateCounts(uint3 id : SV_DispatchThreadID)
 
 // Radix test -------------------------
 [numthreads(GroupSize, 1, 1)]
-void RadixCounts(uint3 id : SV_DispatchThreadID)
+void RadixCounts(uint3 id : SV_DispatchThreadID, uint GTid : SV_GroupThreadID, uint Gid : SV_GroupID)
 {
 	if (id.x >= numInputs) return;
 	
@@ -60,7 +60,19 @@ void RadixCounts(uint3 id : SV_DispatchThreadID)
 	[unroll(RADIX_R)]
 	for (uint i = 0; i < RADIX_R; i++)
 	{
-		if (currBit == i)	bitBucket[i * numInputs + id.x] = 1;
+		// 1024 groups, 256 thread per groups
+		// --------------- 1024 groups ---------------
+		// ---256 uint---		---256 uint---		 :
+		// 16			:  ...	16		     :	...	 :
+		// --------------		--------------		 :
+		// -------------------------------------------
+		
+		// if (currBit == i) bitBucket[Gid * GroupSize + GTid] = 1;
+		uint mAddress = i * numInputs + id.x;
+		if (currBit == i)
+			bitBucket[mAddress] = 1;
+		else
+			bitBucket[mAddress] = 0;
 	}
 }
 // ------------------------------------

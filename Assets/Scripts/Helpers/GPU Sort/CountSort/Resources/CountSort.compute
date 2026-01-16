@@ -52,6 +52,9 @@ void CopyBack(uint3 id : SV_DispatchThreadID)
 {
 	if (id.x >= numInputs) return;
 
+	// SORTED PIndex array
 	InputItems[id.x] = SortedItems[id.x];
+	
+	// SORTED Cellkey array
 	InputKeys[id.x] = SortedKeys[id.x];
 }
