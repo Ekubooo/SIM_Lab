@@ -1,0 +1,116 @@
+#pragma kernel CS
+#define RADIX_R 16
+#define THREAD_NUM_X 1024
+
+groupshared uint localPrefix[THREAD_NUM_X];
+
+uint get4Bits(uint num, int i)
+{
+    // i is current iteration (pass)
+    return ((num >> i*4) & 0xf);
+}
+
+// EScan
+void PresumLocal(uint IGid : SV_GroupIndex, uint cIndex)
+{
+    //up sweep
+    uint d = 0;
+    uint i = 0;
+    uint offset = 1;
+    uint totalNum = THREAD_NUM_X;
+    
+    [unroll]
+    for (d = totalNum>>1; d > 0; d >>= 1)
+    {
+        GroupMemoryBarrierWithGroupSync();
+        if (IGid < d)
+        {
+            uint indexA = offset * (2 * IGid + 1) - 1;
+            uint indexB = offset * (2 * IGid + 2) - 1;
+
+            localPrefix[indexB] += localPrefix[indexA];
+        }
+        offset *= 2;
+    }
+
+    // Set 0 part, 0 thread is the last active thread, it's safe to access 
+    if (IGid == 0)
+    {
+        // IScan can output here
+        g_SrcCounters[cIndex] = localPrefix[totalNum - 1];
+        
+        localPrefix[totalNum - 1] = 0;
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    //Down-sweep
+    [unroll]
+    for (d = 1; d < totalNum; d <<= 2)  
+    {
+        offset >>= 1;
+        GroupMemoryBarrierWithGroupSync();
+
+        if (IGid < d)
+        {
+            uint indexA = offset * (2 * IGid + 1) - 1;
+            uint indexB = offset * (2 * IGid + 2) - 1;
+
+            uint sum = localPrefix[indexA];
+            localPrefix[indexA] = localPrefix[indexB];
+            localPrefix[indexB] += sum;
+        }
+    }
+    GroupMemoryBarrierWithGroupSync();
+}
+
+
+// one thread process one element
+// 1024 dispitch, 1024 per group.
+[numthreads(THREAD_NUM_X, 1, 1)]
+void CS(uint GI : SV_GroupIndex, uint3 DTid : SV_DispatchThreadID, uint3 Gid : SV_GroupID)
+{
+    //get curr digit correspend to 4-bit LSD
+    uint digit = get4Bits(g_cellHash[DTid.x], g_CurrIteration);
+
+    // bit bucket (counter)
+    [unroll(RADIX_R)]
+    for (uint r = 0; r < RADIX_R; ++r)
+    {
+        //load to share memory 
+        localPrefix[GI] = (digit == r ? 1 : 0);
+        GroupMemoryBarrierWithGroupSync();
+
+        //prefix sum according to r in this blocks
+        // g_BlocksNums = 1024
+        uint counterIndex = r * g_BlocksNums + Gid.x;
+        PresumLocal(GI, counterIndex);
+        // now localPrefix is EScan of current group.
+
+        // ouput the total sum to counter
+        if (GI == THREAD_NUM_X - 1)
+        {
+            // uint counterIndex = r * g_BlocksNums + Gid.x;
+            uint counter = localPrefix[GI];
+            //output prefix sum according to r
+            if (digit == r)
+            {
+                counter++;
+            }
+            // g_SrcCounters[16 * 1024]
+            g_SrcCounters[counterIndex] = counter;
+        }
+
+        //output prefix sum according to r
+        if(digit == r)
+        {
+            // g_SrcPrefix[1024 * 1024]
+            g_SrcPrefix[DTid.x] = localPrefix[GI];
+        }
+        
+        GroupMemoryBarrierWithGroupSync();
+    }
+    
+}
+
+
+

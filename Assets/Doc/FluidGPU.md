@@ -92,7 +92,8 @@
     ```
 
 
-- GPU 4-bit Radix sort process (error)
+- GPU 4-bit Radix sort process 
+    - bit mask version
     ```
     gpuSort.Run() 
         cs.Set();
@@ -111,8 +112,19 @@
     END gpuSort.Run()
     ```
 
+    - bit bucket scan-in-group version
     ```
-    
+    GroupCount.Kernel
+        digit = get4Bits(data[GI], currIteration);
+        [unroll(16)] For r = 0 to 15
+            ShareMemory bitMaskp[GI] = (digit == r ? 1 : 0);
+            GMBGroupSync();
+            PrefixSumLocal(GI);
+            globalCounter.WRITE
+            globalPrefix.WRITE
+            GMBGroupSync();
+        END For
+    END GroupCount.Kernel
     ```
 
 - Scan process
@@ -130,7 +142,7 @@
     END Run()
     ```
 
-- SCAN Example process for 262144 particles
+- Scan Example process for 262144 particles
     ```
     Scan.Run(Elements)
         int numGroups1 = Elements.count / 2 / 256 ;   

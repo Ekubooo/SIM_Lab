@@ -43,8 +43,7 @@ void BlockScan(uint threadGlobal : SV_DispatchThreadID, uint threadLocal : SV_Gr
 		if (threadLocal < numActiveThreads)		
 		{	// ((0-255) < (256 -> 128 -> ... 1)): summation per d (tree layer)
 			// for all k = 0 to n – 1 by 2^(d+1) **in parallel** do (k loop)
-
-			// 
+			
 			uint indexA = offset * (localA + 1) - 1;
 			uint indexB = offset * (localB + 1) - 1;
 			Temp[indexB] = Temp[indexA] + Temp[indexB];

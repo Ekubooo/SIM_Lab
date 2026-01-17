@@ -2,18 +2,32 @@
 #pragma kernel CalculateCounts
 #pragma kernel ScatterOutput
 #pragma kernel CopyBack
+// pragma new kernel here (not yet)
+
+#define RADIX_R 16
 
 RWStructuredBuffer<uint> InputItems;	
 RWStructuredBuffer<uint> InputKeys;
-// InputItems is particle number/id	(is it?)
-// InputKeys is cell key			(is it?)
+// InputItems is particle number/id	
+// InputKeys is cell key			
 RWStructuredBuffer<uint> SortedItems;
 RWStructuredBuffer<uint> SortedKeys;
 
 RWStructuredBuffer<uint> Counts;
+
+// 16 bucket for 4-bit (not set yet) (16 * PNum of uint)
+RWStructuredBuffer<uint> bitBucket;
+
 uint numInputs;
+uint currIteration;		// not pass-int yet
 
 static const int GroupSize = 256;
+
+uint get4Bits(uint num, int i)
+{
+	// i is current iteration(pass)
+	return ((num >> i*4) & 0xf);
+}
 
 [numthreads(GroupSize, 1, 1)]
 void ClearCounts(uint3 id : SV_DispatchThreadID)
@@ -32,6 +46,30 @@ void CalculateCounts(uint3 id : SV_DispatchThreadID)
 	uint key = InputKeys[id.x];
 	InterlockedAdd(Counts[key], 1);
 }
+
+// Radix test -------------------------
+[numthreads(GroupSize, 1, 1)]
+void RadixCounts(uint3 id : SV_DispatchThreadID)
+{
+	if (id.x >= numInputs) return;
+	
+	// take curr 4-bit
+	uint currBit = get4Bits(InputKeys[id.x] ,currIteration);
+	
+	// deal with 4-bit (16 buckets)
+	[unroll(RADIX_R)]
+	for (uint i = 0; i < RADIX_R; i++)
+	{
+		bitBucket[i * numInputs + id.x] = (currBit == i ? 1 : 0);
+	}
+}
+
+// 1024 groups, 256 thread per groups
+// --------------- 1024 groups ---------------
+// ---256 uint---		---256 uint---		 :
+// 16			:  ...	16		     :	...	 :
+// --------------		--------------		 :
+// -------------------------------------------
 
 [numthreads(GroupSize, 1, 1)]
 void ScatterOutput(uint3 id : SV_DispatchThreadID)
@@ -52,9 +90,6 @@ void CopyBack(uint3 id : SV_DispatchThreadID)
 {
 	if (id.x >= numInputs) return;
 
-	// SORTED PIndex array
 	InputItems[id.x] = SortedItems[id.x];
-	
-	// SORTED Cellkey array
 	InputKeys[id.x] = SortedKeys[id.x];
 }
