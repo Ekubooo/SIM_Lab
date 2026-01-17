@@ -17,7 +17,7 @@ namespace Seb.GPUSorting
 		
 
 		readonly Scan scan = new();
-		readonly ComputeShader cs = ComputeHelper.LoadComputeShader("CountSort");
+		readonly ComputeShader cs = ComputeHelper.LoadComputeShader("RadixInBlock");
 
 		ComputeBuffer sortedItemsBuffer;
 		ComputeBuffer sortedValuesBuffer;

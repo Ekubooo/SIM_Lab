@@ -116,7 +116,7 @@
     ```
     GroupCount.Kernel
         digit = get4Bits(data[GI], currIteration);
-        [unroll(16)] For r = 0 to 15
+        [unroll(16)] For r = 0 to 15    // 4-bit bucket
             ShareMemory bitMaskp[GI] = (digit == r ? 1 : 0);
             GMBGroupSync();
             PrefixSumLocal(GI);
