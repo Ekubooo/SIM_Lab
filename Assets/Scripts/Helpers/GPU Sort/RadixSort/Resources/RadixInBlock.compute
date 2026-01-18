@@ -1,7 +1,4 @@
 #pragma kernel GroupCount
-#define RADIX_R 16
-#define THREAD_NUM_X 1024
-#define GROUP_SIZE 1024
 
 #include "./RadixHelper.hlsl"
 
@@ -9,20 +6,20 @@ RWStructuredBuffer<uint> Elements;          // input
 RWStructuredBuffer<uint> BucketCounter;     // [1024 * 16]  or [GroupNum * BucketNum]
 RWStructuredBuffer<uint> GlobalPSum;        // [1024 ^ 2]   or [GroupNum * GroupSize] 
 
+groupshared uint localPrefix[THREAD_NUM_X];
+
 uint g_BlocksNums;  // = 1024
 uint currIteration;
-
-groupshared uint localPrefix[THREAD_NUM_X];
 
 // EScan
 void PrefixSumLocal(uint IGid : SV_GroupIndex, uint cIndex)
 {
-    //up sweep
     uint d = 0;
     uint i = 0;
     uint offset = 1;
     uint totalNum = THREAD_NUM_X;
     
+    // Up sweep
     [unroll]
     for (d = totalNum>>1; d > 0; d >>= 1)
     {
@@ -40,16 +37,16 @@ void PrefixSumLocal(uint IGid : SV_GroupIndex, uint cIndex)
     // Set 0 part, 0 thread is the last active thread, it's safe to access 
     if (IGid == 0)
     {
-        // IScan result
+        // IScan result output
         BucketCounter[cIndex] = localPrefix[totalNum - 1];
         
         localPrefix[totalNum - 1] = 0;
     }
     GroupMemoryBarrierWithGroupSync();
 
-    //Down-sweep
+    // Down sweep
     [unroll]
-    for (d = 1; d < totalNum; d <<= 2)  
+    for (d = 1; d < totalNum; d *= 2)  
     {
         offset >>= 1;
         GroupMemoryBarrierWithGroupSync();
@@ -71,6 +68,7 @@ void PrefixSumLocal(uint IGid : SV_GroupIndex, uint cIndex)
 
 // one thread process one element
 // 1024 dispitch, 1024 per group.
+
 [numthreads(THREAD_NUM_X, 1, 1)]
 void GroupCount(uint GI : SV_GroupIndex, uint3 DTid : SV_DispatchThreadID, uint3 Gid : SV_GroupID)
 {
@@ -90,6 +88,7 @@ void GroupCount(uint GI : SV_GroupIndex, uint3 DTid : SV_DispatchThreadID, uint3
         // now localPrefix[] is EScan of current group.
 
         // Write back prefix sum according to r
+        // access by currBit, so no conflict
         if(digit == r)  GlobalPSum[DTid.x] = localPrefix[GI];
         
         GroupMemoryBarrierWithGroupSync();

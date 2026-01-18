@@ -118,7 +118,7 @@
         GroupCount.Kernel
             digit = get4Bits(data[GI], currIteration);
             [unroll(16)] For r = 0 to 15    // 4-bit bucket
-                ShareMemory bitMaskp[GI] = (digit == r ? 1 : 0);
+                SharedMemory[] = (digit == r ? 1 : 0);
                 GMBGroupSync();
                 PrefixSumLocal(GI);
                 globalCounter.WRITE
@@ -130,9 +130,12 @@
         // now have GlobalPSum[1024 ^ 2]        (InGroupOffset(?))
         // now have BucketCounter[1024 * 16]    (globalOffset(?))
 
-        CountPSum.Kernel
-            ...
-        END CountPSum.Kernel
+        GlobalCount.Kernel
+            SharedMemory[] =(id.x < CNum ? BC[] : 0);
+            GMBGroupSync();
+            PrefixSumCounter(GI);
+
+        END GlobalCount.Kernel
 
         RadixDispatch.Kernel
             ... 

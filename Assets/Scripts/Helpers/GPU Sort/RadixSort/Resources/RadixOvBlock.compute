@@ -1,0 +1,99 @@
+#pragma kernel GlobalCount
+#include "./RadixHelper.hlsl"
+
+RWStructuredBuffer<uint> BucketCounter;     // [1024 * 16]  or [GroupNum * BucketNum]
+RWStructuredBuffer<uint> DstCounter;        // [1024 * 16]  or [GroupNum * BucketNum]
+
+groupshared uint localPrefix[THREAD_NUM_X];
+
+uint g_CounterNums;     // = 16 * 1024
+
+void PrefixSumCounter(uint GI : SV_GroupIndex)
+{
+    uint d = 0;
+    uint i = 0;
+    uint offset = 1;
+    
+    // total num must be 2^N
+    uint totalNum = g_CounterNums < THREAD_NUM_X ? g_CounterNums : THREAD_NUM_X;
+    totalNum = pow(2,ceil(log2(totalNum)));
+    
+    // Up sweep
+    [unroll]
+    for (d = totalNum>>1; d > 0; d >>= 1)
+    {
+        GroupMemoryBarrierWithGroupSync();
+        if (GI < d)
+        {
+            uint indexA = offset * (2 * GI + 1) - 1;
+            uint indexB = offset * (2 * GI + 2) - 1;
+
+            localPrefix[indexB] += localPrefix[indexA];
+        }
+        offset *= 2;
+    }
+
+    // SET 0, thread no.0 is safe.
+    if (GI == 0)
+    {
+        uint last = totalNum - 1;
+        // ? = localPrefix[last]    // IScan output.
+        localPrefix[last] = 0;
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    // Down sweep
+    [unroll]
+    for (d = 1; d < totalNum; d *= 2)      
+    {
+        offset >>= 1;
+        GroupMemoryBarrierWithGroupSync();
+
+        if (GI < d)
+        {
+            uint indexA = offset * (2 * GI + 1) - 1;
+            uint indexB = offset * (2 * GI + 2) - 1;
+
+            uint tmp = localPrefix[indexA];
+            localPrefix[indexA] = localPrefix[indexB];
+            localPrefix[indexB] += tmp;
+        }
+    }
+    GroupMemoryBarrierWithGroupSync();
+}
+
+// 16 Dispatch, 1024 pre group
+
+[numthreads(THREAD_NUM_X, 1, 1)]
+void GlobalCount(uint3 DTid : SV_DispatchThreadID,uint GI : SV_GroupIndex,uint3 Gid:SV_GroupID)
+{
+    // load date to shared memort
+    localPrefix[GI.x] = (DTid.x < g_CounterNums ? BucketCounter[DTid.x] : 0);
+    GroupMemoryBarrierWithGroupSync();
+    
+    // Calc counter prefix sum
+    PrefixSumCounter(GI);
+    // localPrefix now is EScan
+    
+    // Periodic ouput 
+    if (DTid.x < g_CounterNums) DstCounter[DTid.x] = localPrefix[GI];
+
+    DeviceMemoryBarrierWithGroupSync();
+
+    if (Gid.x > 0)
+    {
+        uint sum = 0;
+        for (uint i = 0; i < Gid.x; ++i)
+        {
+            uint loc = (i + 1) * THREAD_NUM_X - 1;
+            sum += DstCounter[loc] + BucketCounter[loc];
+            // sum += IScan[i]      // v2 can optimize
+        }
+        
+        localPrefix[GI] += sum;
+        GroupMemoryBarrierWithGroupSync();
+        
+        // Final output 
+        if (DTid.x < g_CounterNums) DstCounter[DTid.x] = localPrefix[GI];
+    }
+}
