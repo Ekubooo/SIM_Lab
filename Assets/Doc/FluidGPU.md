@@ -115,14 +115,14 @@
     - bit bucket scan-in-group version
     ```
     For pass = 0 to 7 (8 pass for 32-bit sort)
-        GroupCount.Kernel
+        GroupCount.Kernel       // 1024 Dispatch
             digit = get4Bits(data[GI], currIteration);
             [unroll(16)] For r = 0 to 15    // 4-bit bucket
                 SharedMemory[] = (digit == r ? 1 : 0);
                 GMBGroupSync();
                 PrefixSumLocal(GI);
-                globalCounter.WRITE
-                globalPrefix.WRITE
+                globalCounter.WRITEBACK;
+                globalPrefix.WRITEBACK;
                 GMBGroupSync();
             END For
         END GroupCount.Kernel
@@ -130,16 +130,19 @@
         // now have GlobalPSum[1024 ^ 2]        (InGroupOffset(?))
         // now have BucketCounter[1024 * 16]    (globalOffset(?))
 
-        GlobalCount.Kernel
+        GlobalCount.Kernel      // 16 Dispatch
             SharedMemory[] =(id.x < CNum ? BC[] : 0);
             GMBGroupSync();
             PrefixSumCounter(GI);
-
+            GlobalOffset.WRITEBACK;
+            SharedMemory[] += accumulate(IScan);
+            GlobalOffset.WRITEBACK;
         END GlobalCount.Kernel
 
-        RadixDispatch.Kernel
+        GlobalScatter.Kernel    // 1024 Dispatch
+            digit = get4Bits(data[GI], currIteration);
             ... 
-        END RadixDispatch.Kernel
+        END GlobalScatter.Kernel
     END For
     ```
 

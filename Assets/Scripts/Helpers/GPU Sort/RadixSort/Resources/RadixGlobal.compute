@@ -1,0 +1,32 @@
+#pragma kernel GlobalScatter
+
+#include "./RadixHelper.hlsl" 
+
+RWStructuredBuffer<uint> Element;           // input    
+RWStructuredBuffer<uint> cIndex;            // input
+RWStructuredBuffer<uint> GlobalPSum;        // [1024 ^ 2]   or [GroupNum * GroupSize]
+RWStructuredBuffer<uint> DstCounter;        // [1024 * 16]  or [GroupNum * BucketNum]
+RWStructuredBuffer<uint> SortedIndex;
+RWStructuredBuffer<uint> SortedKeys;
+
+
+uint currIteration;
+uint g_BlocksNums;  // = 1024
+
+
+// 1024 Dispatch, 1024 per group.
+[numthreads(THREAD_NUM_X, 1, 1)]
+void GlobalScatter(uint3 DTid : SV_DispatchThreadID,uint3 Gid:SV_GroupID)
+{
+    //get curr digit 
+    uint digit = get4Bits(Element[DTid.x], currIteration);
+
+    // Global Scatter
+    uint counterIndex = digit * g_BlocksNums + Gid.x;
+    uint globalOffset = GlobalPSum[DTid.x] + DstCounter[counterIndex];
+    SortedKeys[globalOffset] = Element[DTid.x];
+    SortedIndex[globalOffset] = cIndex[DTid.x];
+
+    // after: at the end of pass loop, switch Elements and Index (?but why)
+    // To be continue here...
+}
