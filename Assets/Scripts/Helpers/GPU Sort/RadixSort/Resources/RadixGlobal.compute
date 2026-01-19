@@ -18,7 +18,6 @@ uint g_BlocksNums;  // = 1024
 [numthreads(THREAD_NUM_X, 1, 1)]
 void GlobalScatter(uint3 DTid : SV_DispatchThreadID,uint3 Gid:SV_GroupID)
 {
-    //get curr digit 
     uint digit = get4Bits(Element[DTid.x], currIteration);
 
     // Global Scatter
@@ -27,6 +26,6 @@ void GlobalScatter(uint3 DTid : SV_DispatchThreadID,uint3 Gid:SV_GroupID)
     SortedKeys[globalOffset] = Element[DTid.x];
     SortedIndex[globalOffset] = cIndex[DTid.x];
 
-    // after: at the end of pass loop, switch Elements and Index (?but why)
+    // after: at the end of pass loop, switch Sorted and Unsort (for next pass?)
     // To be continue here...
 }

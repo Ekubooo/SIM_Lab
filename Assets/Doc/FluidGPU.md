@@ -141,8 +141,13 @@
 
         GlobalScatter.Kernel    // 1024 Dispatch
             digit = get4Bits(data[GI], currIteration);
-            ... 
+            globalOffset;
+            SortedKeys[].WRITEBACK;
+            SortedIndex[]WRITEBACK;
         END GlobalScatter.Kernel
+
+        // ...
+        
     END For
     ```
 

@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Seb.Helpers;
+using TMPro;
 
 namespace Seb.GPUSorting
 {
@@ -13,11 +14,11 @@ namespace Seb.GPUSorting
 		static readonly int ID_SortedKeys = Shader.PropertyToID("SortedKeys");
 		static readonly int ID_Counts = Shader.PropertyToID("Counts");
 		static readonly int ID_NumInputs = Shader.PropertyToID("numInputs");
-		static readonly int ID_CurrIteration = Shader.PropertyToID("currIteration");	// new and not included in shader
+		static readonly int ID_CurrIteration = Shader.PropertyToID("currIteration");	
 		
 
 		readonly Scan scan = new();
-		readonly ComputeShader cs = ComputeHelper.LoadComputeShader("RadixInBlock");
+		readonly ComputeShader cs = ComputeHelper.LoadComputeShader("RadixSort");	
 
 		ComputeBuffer sortedItemsBuffer;
 		ComputeBuffer sortedValuesBuffer;
@@ -27,6 +28,10 @@ namespace Seb.GPUSorting
 		const int CountKernel = 1;
 		const int ScatterOutputsKernel = 2;
 		const int CopyBackKernel = 3;
+		
+		const int InBlockKernel = 0;
+		const int OvBlockKernel = 1;
+		const int ScatterKernel = 2;
 
 		// Sorts a buffer of indices based on a buffer of keys (note that the keys will also be sorted in the process).
 		// Note: the maximum possible key value must be known ahead of time for this algorithm (and preferably not be too large), as memory is allocated for all possible keys.
@@ -78,6 +83,14 @@ namespace Seb.GPUSorting
 			for (int i = 0; i < 8; i++) // 8-pass for 32-bit uint
 			{
 				cs.SetInt(ID_CurrIteration, i);
+				ComputeHelper.Dispatch(cs, count, kernelIndex: ClearCountsKernel);
+				ComputeHelper.Dispatch(cs, count, kernelIndex: ClearCountsKernel);
+				ComputeHelper.Dispatch(cs, count, kernelIndex: ClearCountsKernel);
+				
+				// switch buffer
+				
+				(itemsBuffer, sortedItemsBuffer) = (sortedItemsBuffer, itemsBuffer);
+				(keysBuffer, sortedValuesBuffer) = (sortedValuesBuffer, keysBuffer); 
 			}
 		}
 

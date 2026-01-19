@@ -1,60 +1,215 @@
-#pragma kernel ClearCounts
-#pragma kernel CalculateCounts
-#pragma kernel ScatterOutput
-#pragma kernel CopyBack
+#pragma kernel InBlockRadix
+#pragma kernel OverBlockRadix 
+#pragma kernel GlobalScatter
 
-RWStructuredBuffer<uint> InputItems;	
+#include "./RadixHelper.hlsl"
+
+// InputItems is particle number/id	
+// InputKeys is cell key
+
+RWStructuredBuffer<uint> Elements;
+RWStructuredBuffer<uint> InputIndex;	
 RWStructuredBuffer<uint> InputKeys;
-// InputItems is particle number/id	(is it?)
-// InputKeys is cell key			(is it?)
-RWStructuredBuffer<uint> SortedItems;
+RWStructuredBuffer<uint> SortedIndex;
 RWStructuredBuffer<uint> SortedKeys;
 
-RWStructuredBuffer<uint> Counts;
-uint numInputs;
+RWStructuredBuffer<uint> BucketCounter;     // [1024 * 16]  or [GroupNum * BucketNum]
+RWStructuredBuffer<uint> GlobalPSum;        // [1024 ^ 2]   or [GroupNum * GroupSize]
+RWStructuredBuffer<uint> DstCounter;        // [1024 * 16]  or [GroupNum * BucketNum]
 
+groupshared uint localPrefix[THREAD_NUM_X];
+
+uint numInputs;
+uint currIteration;
+uint g_BlocksNums;          // = 1024
+uint g_CounterNums;         // = 16 * 1024
 static const int GroupSize = 256;
 
-[numthreads(GroupSize, 1, 1)]
-void ClearCounts(uint3 id : SV_DispatchThreadID)
-{
-	if (id.x >= numInputs) return;
 
-	Counts[id.x] = 0;
-	InputItems[id.x] = id.x;
+void PrefixSumLocal(uint IGid : SV_GroupIndex, uint cIndex)
+{
+    uint d = 0;
+    uint i = 0;
+    uint offset = 1;
+    uint totalNum = THREAD_NUM_X;
+    
+    // Up sweep
+    [unroll]
+    for (d = totalNum>>1; d > 0; d >>= 1)
+    {
+        GroupMemoryBarrierWithGroupSync();
+        if (IGid < d)
+        {
+            uint indexA = offset * (2 * IGid + 1) - 1;
+            uint indexB = offset * (2 * IGid + 2) - 1;
+
+            localPrefix[indexB] += localPrefix[indexA];
+        }
+        offset *= 2;
+    }
+
+    // Set 0 part, 0 thread is the last active thread, it's safe to access 
+    if (IGid == 0)
+    {
+        // IScan result output
+        BucketCounter[cIndex] = localPrefix[totalNum - 1];
+        
+        localPrefix[totalNum - 1] = 0;
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    // Down sweep
+    [unroll]
+    for (d = 1; d < totalNum; d *= 2)  
+    {
+        offset >>= 1;
+        GroupMemoryBarrierWithGroupSync();
+
+        if (IGid < d)
+        {
+            uint indexA = offset * (2 * IGid + 1) - 1;
+            uint indexB = offset * (2 * IGid + 2) - 1;
+
+            uint sum = localPrefix[indexA];
+            localPrefix[indexA] = localPrefix[indexB];
+            localPrefix[indexB] += sum;
+        }
+    }
+    
+    GroupMemoryBarrierWithGroupSync();
 }
 
-[numthreads(GroupSize, 1, 1)]
-void CalculateCounts(uint3 id : SV_DispatchThreadID)
+void PrefixSumCounter(uint GI : SV_GroupIndex)
 {
-	if (id.x >= numInputs) return;
+    uint d = 0;
+    uint i = 0;
+    uint offset = 1;
+    
+    // total num must be 2^N
+    uint totalNum = g_CounterNums < THREAD_NUM_X ? g_CounterNums : THREAD_NUM_X;
+    totalNum = pow(2,ceil(log2(totalNum)));
+    
+    // Up sweep
+    [unroll]
+    for (d = totalNum>>1; d > 0; d >>= 1)
+    {
+        GroupMemoryBarrierWithGroupSync();
+        if (GI < d)
+        {
+            uint indexA = offset * (2 * GI + 1) - 1;
+            uint indexB = offset * (2 * GI + 2) - 1;
 
-	uint key = InputKeys[id.x];
-	InterlockedAdd(Counts[key], 1);
+            localPrefix[indexB] += localPrefix[indexA];
+        }
+        offset *= 2;
+    }
+
+    // SET 0, thread no.0 is safe.
+    if (GI == 0)
+    {
+        uint last = totalNum - 1;
+        // ? = localPrefix[last]    // IScan output.
+        localPrefix[last] = 0;
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    // Down sweep
+    [unroll]
+    for (d = 1; d < totalNum; d *= 2)      
+    {
+        offset >>= 1;
+        GroupMemoryBarrierWithGroupSync();
+
+        if (GI < d)
+        {
+            uint indexA = offset * (2 * GI + 1) - 1;
+            uint indexB = offset * (2 * GI + 2) - 1;
+
+            uint tmp = localPrefix[indexA];
+            localPrefix[indexA] = localPrefix[indexB];
+            localPrefix[indexB] += tmp;
+        }
+    }
+    GroupMemoryBarrierWithGroupSync();
 }
 
-[numthreads(GroupSize, 1, 1)]
-void ScatterOutput(uint3 id : SV_DispatchThreadID)
+
+// one thread process one element
+// 1024 dispitch, 1024 per group.
+[numthreads(THREAD_NUM_X, 1, 1)]
+void InBlockRadix(uint GI : SV_GroupIndex, uint3 DTid : SV_DispatchThreadID, uint3 Gid : SV_GroupID)
 {
-	if (id.x >= numInputs) return;
+    // get curr digit correspend to 4-bit LSD
+    uint digit = get4Bits(Elements[DTid.x], currIteration);
+    
+    [unroll(RADIX_R)]
+    for (uint r = 0; r < RADIX_R; ++r)
+    {
+        // load to share memory 
+        localPrefix[GI] = (digit == r ? 1 : 0);
+        GroupMemoryBarrierWithGroupSync();
 
-	uint key = InputKeys[id.x];
+        // prefix sum according to r in this blocks
+        PrefixSumLocal(GI, r * g_BlocksNums + Gid.x);
+        
+        // now localPrefix[] is EScan of current group.
 
-	uint sortedIndex;
-	InterlockedAdd(Counts[key], 1, sortedIndex);
-
-	SortedItems[sortedIndex] = InputItems[id.x];
-	SortedKeys[sortedIndex] = key;
+        // Write back prefix sum according to r
+        // access by currBit, so no conflict
+        if(digit == r)  GlobalPSum[DTid.x] = localPrefix[GI];
+        
+        GroupMemoryBarrierWithGroupSync();
+    }
 }
 
-[numthreads(GroupSize, 1, 1)]
-void CopyBack(uint3 id : SV_DispatchThreadID)
+// 16 Dispatch, 1024 pre group
+[numthreads(THREAD_NUM_X, 1, 1)]
+void OverBlockRadix(uint3 DTid : SV_DispatchThreadID,uint GI : SV_GroupIndex,uint3 Gid:SV_GroupID)
 {
-	if (id.x >= numInputs) return;
+    // load date to shared memort
+    localPrefix[GI.x] = (DTid.x < g_CounterNums ? BucketCounter[DTid.x] : 0);
+    GroupMemoryBarrierWithGroupSync();
+    
+    // Calc counter prefix sum
+    PrefixSumCounter(GI);
+    // localPrefix now is EScan
+    
+    // Periodic ouput 
+    if (DTid.x < g_CounterNums) DstCounter[DTid.x] = localPrefix[GI];
 
-	// SORTED PIndex array
-	InputItems[id.x] = SortedItems[id.x];
-	
-	// SORTED Cellkey array
-	InputKeys[id.x] = SortedKeys[id.x];
+    DeviceMemoryBarrierWithGroupSync();
+
+    if (Gid.x > 0)
+    {
+        uint sum = 0;
+        for (uint i = 0; i < Gid.x; ++i)
+        {
+            uint loc = (i + 1) * THREAD_NUM_X - 1;
+            sum += DstCounter[loc] + BucketCounter[loc];
+            // sum += IScan[i]      // v2 can optimize
+        }
+        
+        localPrefix[GI] += sum;
+        GroupMemoryBarrierWithGroupSync();
+        
+        // Final output 
+        if (DTid.x < g_CounterNums) DstCounter[DTid.x] = localPrefix[GI];
+    }
+}
+
+
+// 1024 Dispatch, 1024 per group.
+[numthreads(THREAD_NUM_X, 1, 1)]
+void GlobalScatter(uint3 DTid : SV_DispatchThreadID,uint3 Gid:SV_GroupID)
+{
+    uint digit = get4Bits(Elements[DTid.x], currIteration);
+
+    // Global Scatter
+    uint counterIndex = digit * g_BlocksNums + Gid.x;
+    uint globalOffset = GlobalPSum[DTid.x] + DstCounter[counterIndex];
+    SortedKeys[globalOffset] = Elements[DTid.x];
+    SortedIndex[globalOffset] = InputIndex[DTid.x];
+
+    // after: at the end of pass loop, switch Sorted and Unsort (for next pass?)
+    // To be continue here...
 }

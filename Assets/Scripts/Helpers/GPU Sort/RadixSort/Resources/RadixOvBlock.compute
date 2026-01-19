@@ -1,4 +1,4 @@
-#pragma kernel GlobalCount
+#pragma kernel OverBlockRadix 
 #include "./RadixHelper.hlsl"
 
 RWStructuredBuffer<uint> BucketCounter;     // [1024 * 16]  or [GroupNum * BucketNum]
@@ -65,7 +65,7 @@ void PrefixSumCounter(uint GI : SV_GroupIndex)
 // 16 Dispatch, 1024 pre group
 
 [numthreads(THREAD_NUM_X, 1, 1)]
-void GlobalCount(uint3 DTid : SV_DispatchThreadID,uint GI : SV_GroupIndex,uint3 Gid:SV_GroupID)
+void OverBlockRadix(uint3 DTid : SV_DispatchThreadID,uint GI : SV_GroupIndex,uint3 Gid:SV_GroupID)
 {
     // load date to shared memort
     localPrefix[GI.x] = (DTid.x < g_CounterNums ? BucketCounter[DTid.x] : 0);
@@ -97,3 +97,4 @@ void GlobalCount(uint3 DTid : SV_DispatchThreadID,uint GI : SV_GroupIndex,uint3 
         if (DTid.x < g_CounterNums) DstCounter[DTid.x] = localPrefix[GI];
     }
 }
+

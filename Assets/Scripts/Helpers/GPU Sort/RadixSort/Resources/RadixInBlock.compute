@@ -1,5 +1,4 @@
-#pragma kernel GroupCount
-
+#pragma kernel InBlockRadix
 #include "./RadixHelper.hlsl"
 
 RWStructuredBuffer<uint> Elements;          // input
@@ -70,7 +69,7 @@ void PrefixSumLocal(uint IGid : SV_GroupIndex, uint cIndex)
 // 1024 dispitch, 1024 per group.
 
 [numthreads(THREAD_NUM_X, 1, 1)]
-void GroupCount(uint GI : SV_GroupIndex, uint3 DTid : SV_DispatchThreadID, uint3 Gid : SV_GroupID)
+void InBlockRadix(uint GI : SV_GroupIndex, uint3 DTid : SV_DispatchThreadID, uint3 Gid : SV_GroupID)
 {
     // get curr digit correspend to 4-bit LSD
     uint digit = get4Bits(Elements[DTid.x], currIteration);
@@ -93,7 +92,6 @@ void GroupCount(uint GI : SV_GroupIndex, uint3 DTid : SV_DispatchThreadID, uint3
         
         GroupMemoryBarrierWithGroupSync();
     }
-    
 }
 
 
