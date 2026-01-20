@@ -44,6 +44,8 @@ namespace Seb.Helpers
 		{
 			gpuSort.Run(SpatialIndices, SpatialKeys, (uint)(SpatialKeys.count - 1));
 			// RadixSort.Run(PIndex, cellkey, (uint)(cellkey.count - 1));
+			// now SpatialIndices, SpatialKeys are ordered.
+			
 			// change the name to avoid ambiguity
 			spatialOffsetsCalc.Run(true, SpatialKeys, SpatialOffsets);
 		}

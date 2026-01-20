@@ -3,100 +3,101 @@ using System.Collections.Generic;
 using UnityEngine;
 using Seb.Helpers;
 using TMPro;
+using UnityEditor.UI;
 
 namespace Seb.GPUSorting
 {
 	public class GPURadixSort
 	{
-		static readonly int ID_InputItems = Shader.PropertyToID("InputItems");
-		static readonly int ID_InputSortKeys = Shader.PropertyToID("InputKeys");
-		static readonly int ID_SortedItems = Shader.PropertyToID("SortedItems");
+		// to be change
+		static readonly int ID_InputIndex = Shader.PropertyToID("InputIndex");
+		static readonly int ID_InputKeys = Shader.PropertyToID("InputKeys");
+		
+		static readonly int ID_SortedIndex = Shader.PropertyToID("SortedIndex");
 		static readonly int ID_SortedKeys = Shader.PropertyToID("SortedKeys");
-		static readonly int ID_Counts = Shader.PropertyToID("Counts");
-		static readonly int ID_NumInputs = Shader.PropertyToID("numInputs");
+		static readonly int ID_BucketCounter = Shader.PropertyToID("BucketCounter");
+		static readonly int ID_DstCounter = Shader.PropertyToID("DstCounter");
+		static readonly int ID_GlobalPSum = Shader.PropertyToID("GlobalPSum");
+		
 		static readonly int ID_CurrIteration = Shader.PropertyToID("currIteration");	
+		static readonly int ID_numInputs = Shader.PropertyToID("numInputs");	
 		
 
 		readonly Scan scan = new();
 		readonly ComputeShader cs = ComputeHelper.LoadComputeShader("RadixSort");	
-
-		ComputeBuffer sortedItemsBuffer;
-		ComputeBuffer sortedValuesBuffer;
-		ComputeBuffer countsBuffer;
-
-		const int ClearCountsKernel = 0;
-		const int CountKernel = 1;
-		const int ScatterOutputsKernel = 2;
-		const int CopyBackKernel = 3;
 		
-		const int InBlockKernel = 0;
-		const int OvBlockKernel = 1;
-		const int ScatterKernel = 2;
+		ComputeBuffer sortedIndexBuffer;
+		ComputeBuffer sortedKeyBuffer;
 
-		// Sorts a buffer of indices based on a buffer of keys (note that the keys will also be sorted in the process).
-		// Note: the maximum possible key value must be known ahead of time for this algorithm (and preferably not be too large), as memory is allocated for all possible keys.
-		// Both buffers expected to be of type <uint>
-		// Note: index buffer is initialized here to values 0...n before sorting
+		ComputeBuffer BucketCounterBuffer;
+		ComputeBuffer DstCounterBuffer;
+		ComputeBuffer GlobalPSumBuffer;
+		
 
 		public void Run(ComputeBuffer itemsBuffer, ComputeBuffer keysBuffer, uint maxValue)
 		{
-			// ---- Init ----
-			int count = itemsBuffer.count;
-			if (ComputeHelper.CreateStructuredBuffer<uint>(ref sortedItemsBuffer, count))
-			{
-				cs.SetBuffer(ScatterOutputsKernel, ID_SortedItems, sortedItemsBuffer);
-				cs.SetBuffer(CopyBackKernel, ID_SortedItems, sortedItemsBuffer);
-			}
-
-			if (ComputeHelper.CreateStructuredBuffer<uint>(ref sortedValuesBuffer, count))
-			{
-				cs.SetBuffer(ScatterOutputsKernel, ID_SortedKeys, sortedValuesBuffer);
-				cs.SetBuffer(CopyBackKernel, ID_SortedKeys, sortedValuesBuffer);
-			}
-
-			if (ComputeHelper.CreateStructuredBuffer<uint>(ref countsBuffer, (int)maxValue + 1))
-			{
-				cs.SetBuffer(ClearCountsKernel, ID_Counts, countsBuffer);
-				cs.SetBuffer(CountKernel, ID_Counts, countsBuffer);
-				cs.SetBuffer(ScatterOutputsKernel, ID_Counts, countsBuffer);
-			}
-
-			cs.SetBuffer(ClearCountsKernel, ID_InputItems, itemsBuffer);
-			cs.SetBuffer(CountKernel, ID_InputSortKeys, keysBuffer);
-			cs.SetBuffer(ScatterOutputsKernel, ID_InputItems, itemsBuffer);
-			cs.SetBuffer(CopyBackKernel, ID_InputItems, itemsBuffer);
-
-			cs.SetBuffer(ScatterOutputsKernel, ID_InputSortKeys, keysBuffer);
-			cs.SetBuffer(CopyBackKernel, ID_InputSortKeys, keysBuffer);
-
-			cs.SetInt(ID_NumInputs, count);
-
-			// ---- Run ----
-			ComputeHelper.Dispatch(cs, count, kernelIndex: ClearCountsKernel);
-			ComputeHelper.Dispatch(cs, count, kernelIndex: CountKernel);
-
-			scan.Run(countsBuffer);
-			ComputeHelper.Dispatch(cs, count, kernelIndex: ScatterOutputsKernel);
-			ComputeHelper.Dispatch(cs, count, kernelIndex: CopyBackKernel);
+			int count = itemsBuffer.count;			// ?? 
 			
-			// ---- Radix Run ----
-			for (int i = 0; i < 8; i++) // 8-pass for 32-bit uint
+			int InBlockKernel  = cs.FindKernel("InBlockRadix");
+			int OvBlockKernel  = cs.FindKernel("OvBlockRadix");
+			int GScatterKernel = cs.FindKernel("GlobalScatter");
+
+			// cs.SetInt(ID_NumInputs, count);			// how to deal with random size of data ?
+			
+			for (int i = 0; i < 8; i++)				// 8-pass for 32-bit uint
 			{
-				cs.SetInt(ID_CurrIteration, i);
-				ComputeHelper.Dispatch(cs, count, kernelIndex: ClearCountsKernel);
-				ComputeHelper.Dispatch(cs, count, kernelIndex: ClearCountsKernel);
-				ComputeHelper.Dispatch(cs, count, kernelIndex: ClearCountsKernel);
+				// ---- Init ----
+				
+				if (ComputeHelper.CreateStructuredBuffer<uint>(ref sortedIndexBuffer, count))	// count not right
+				{
+					cs.SetBuffer(GScatterKernel, ID_SortedIndex, sortedIndexBuffer);
+				}
+
+				if (ComputeHelper.CreateStructuredBuffer<uint>(ref sortedKeyBuffer, count))		// count not right
+				{
+					cs.SetBuffer(GScatterKernel, ID_SortedKeys, sortedKeyBuffer);
+				}
+				
+				if (ComputeHelper.CreateStructuredBuffer<uint>(ref BucketCounterBuffer, count))	// count not right
+				{
+					cs.SetBuffer(InBlockKernel, ID_BucketCounter, BucketCounterBuffer);
+					cs.SetBuffer(OvBlockKernel, ID_BucketCounter, BucketCounterBuffer);
+				}
+
+				if (ComputeHelper.CreateStructuredBuffer<uint>(ref DstCounterBuffer, count))	// count not right
+				{
+					cs.SetBuffer(OvBlockKernel, ID_DstCounter, DstCounterBuffer);
+					cs.SetBuffer(GScatterKernel, ID_DstCounter, DstCounterBuffer);
+				}
+
+				if (ComputeHelper.CreateStructuredBuffer<uint>(ref GlobalPSumBuffer, count))	// count not right
+				{
+					cs.SetBuffer(InBlockKernel, ID_GlobalPSum, GlobalPSumBuffer);
+					cs.SetBuffer(GScatterKernel, ID_GlobalPSum, GlobalPSumBuffer);
+				}
+				
+				cs.SetBuffer(GScatterKernel ,ID_InputIndex, itemsBuffer);
+				
+				cs.SetBuffer(InBlockKernel ,ID_InputKeys, keysBuffer);
+				cs.SetBuffer(OvBlockKernel ,ID_InputKeys, keysBuffer);
+				cs.SetBuffer(GScatterKernel ,ID_InputKeys, keysBuffer);
+				
+				// run
+				ComputeHelper.Dispatch(cs, count, kernelIndex: cs.FindKernel("InBlockRadix"));
+				ComputeHelper.Dispatch(cs, count, kernelIndex: cs.FindKernel("OverBlockRadix"));
+				ComputeHelper.Dispatch(cs, count, kernelIndex: cs.FindKernel("GlobalScatter"));
+				// ComputeHelper.Dispatch(cs, count, kernelIndex: cs.FindKernel("CopyBack"));	// need or not?
 				
 				// switch buffer
-				
-				(itemsBuffer, sortedItemsBuffer) = (sortedItemsBuffer, itemsBuffer);
-				(keysBuffer, sortedValuesBuffer) = (sortedValuesBuffer, keysBuffer); 
+				(sortedIndexBuffer, itemsBuffer) = (itemsBuffer, sortedIndexBuffer);
+				(sortedKeyBuffer, keysBuffer) = (keysBuffer, sortedKeyBuffer);
 			}
+			// itemsBuffer, keysBuffer now is result.
 		}
 
 		public void Release()
 		{
-			ComputeHelper.Release(sortedItemsBuffer, sortedValuesBuffer, countsBuffer);
+			ComputeHelper.Release(sortedIndexBuffer, sortedKeyBuffer, BucketCounterBuffer, DstCounterBuffer, GlobalPSumBuffer);
 			scan.Release();
 		}
 	}

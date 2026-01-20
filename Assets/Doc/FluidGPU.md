@@ -121,8 +121,8 @@
                 SharedMemory[] = (digit == r ? 1 : 0);
                 GMBGroupSync();
                 PrefixSumLocal(GI);
-                globalCounter.WRITEBACK;
-                globalPrefix.WRITEBACK;
+                globalCounter[].WRITEBACK;
+                globalPrefix[].WRITEBACK;
                 GMBGroupSync();
             END For
         END GroupCount.Kernel
@@ -139,16 +139,19 @@
             GlobalOffset.WRITEBACK;
         END GlobalCount.Kernel
 
+        // now what?
+
         GlobalScatter.Kernel    // 1024 Dispatch
             digit = get4Bits(data[GI], currIteration);
             globalOffset;
-            SortedKeys[].WRITEBACK;
-            SortedIndex[]WRITEBACK;
+            SortedKey[].WRITEBACK;
+            SortedIndex[].WRITEBACK;
         END GlobalScatter.Kernel
 
-        // ...
-        
     END For
+    // Switch Buffer for next pass.
+    (Ordered, UnOrder) = (UnOrder, Ordered);
+
     ```
 
 - Scan process
@@ -266,7 +269,7 @@
 
         offsets.Kernel;     // 256 thread as befor
             Boundary Check;
-            Offset[key[i]] = key[i] != key[i-1] ? i : ∞;
+            Offset[key[i]] = (key[i] != key[i-1] ? i : ∞);
         END offsets.Kernel;
     END spatialOffsetsCalc.Run();
     ```
