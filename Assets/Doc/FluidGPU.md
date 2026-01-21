@@ -118,6 +118,7 @@
     - bit bucket scan-in-group version
     ```
     For pass = 0 to 7 (8 pass for 32-bit sort)
+        SetBuffer(para[]);      // switchin bind ping-pong buffer.
         GroupCount.Kernel       // 1024 Dispatch
             digit = get4Bits(data[GI], currIteration);
             [unroll(16)] For r = 0 to 15    // 4-bit bucket
@@ -130,8 +131,8 @@
             END For
         END GroupCount.Kernel
 
-        // now have GlobalPSum[1024 ^ 2]        (InGroupOffset(?))
-        // now have BucketCounter[1024 * 16]    (globalOffset(?))
+        // now have GlobalPSum[1024 ^ 2]       
+        // now have BucketCounter[1024 * 16]    
 
         GlobalCount.Kernel      // 16 Dispatch
             SharedMemory[] =(id.x < CNum ? BC[] : 0);
@@ -142,18 +143,21 @@
             GlobalOffset.WRITEBACK;
         END GlobalCount.Kernel
 
-        // now what?
+        // now have: BucketCounter[1024 * 16]
+        // now have: in_Group EScan GlobalPSum[1024 ^ 2] 
+        // now have: counter EScan  DstCounter[1024 * 16]
 
         GlobalScatter.Kernel    // 1024 Dispatch
             digit = get4Bits(data[GI], currIteration);
-            globalOffset;
+            globalOffset = GlobalPSum + DstCounter;
             SortedKey[].WRITEBACK;
             SortedIndex[].WRITEBACK;
         END GlobalScatter.Kernel
 
+        // Switch Pointer after one pass
+        (Ordered, UnOrder) = (UnOrder, Ordered);
+
     END For
-    // Switch Buffer for next pass.
-    (Ordered, UnOrder) = (UnOrder, Ordered);
 
     ```
 

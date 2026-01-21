@@ -171,6 +171,7 @@ void OverBlockRadix(uint3 DTid : SV_DispatchThreadID,uint GI : SV_GroupIndex,uin
         for (uint i = 0; i < Gid.x; ++i)
         {
             uint loc = (i + 1) * THREAD_NUM_X - 1;
+            // IScan = EScan[last] + Element[last];
             sum += DstCounter[loc] + BucketCounter[loc];
         }
         
@@ -194,7 +195,4 @@ void GlobalScatter(uint3 DTid : SV_DispatchThreadID,uint3 Gid:SV_GroupID)
     uint globalOffset = GlobalPSum[DTid.x] + DstCounter[counterIndex];
     SortedKeys[globalOffset] = InputKeys[DTid.x];
     SortedIndex[globalOffset] = InputIndex[DTid.x];
-
-    // after: at the end of pass loop, switch Sorted and Unsort (for next pass?)
-    // To be continue here...
 }

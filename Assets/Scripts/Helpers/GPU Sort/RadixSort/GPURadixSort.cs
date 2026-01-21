@@ -7,14 +7,15 @@ using UnityEditor.UI;
 
 // todo: sort the input.
 // todo: dispatch right number. (upper layer)
-// input.size > PNum,  padding by group size (?)
+// todo: is PNum needed?
+// do cell key and PIndex need init in pass loop? 
+	// no because data in pass loop is not the result; and will resulted after 8-pass.
+	// every sim_step reCalculating the cellkey-hash, and **PIndex**.
 
 // how to padding?
-// padding in sort kernel: input.size < sorting buffer,
-// padding at hash kernel: input size = sorting buffer,
-// gemini suggest that padding in hash kernel.
+	// padding at hash kernel: input size = sorting buffer.
 
-// where to init index? already has cellkeys now.
+// where to init index? already has cellkeys.
 // in hash kernel now.
 
 namespace Seb.GPUSorting
@@ -34,13 +35,11 @@ namespace Seb.GPUSorting
 		static readonly int ID_CurrIteration = Shader.PropertyToID("currIteration");	
 		static readonly int ID_numInputs = Shader.PropertyToID("numInputs");	
 		
-
-		readonly Scan scan = new();
+		
 		readonly ComputeShader cs = ComputeHelper.LoadComputeShader("RadixSort");	
 		
 		ComputeBuffer sortedIndexBuffer;
 		ComputeBuffer sortedKeyBuffer;
-
 		ComputeBuffer BucketCounterBuffer;
 		ComputeBuffer DstCounterBuffer;
 		ComputeBuffer GlobalPSumBuffer;
@@ -56,42 +55,50 @@ namespace Seb.GPUSorting
 			int OvBlockKernel  = cs.FindKernel("OvBlockRadix");
 			int GScatterKernel = cs.FindKernel("GlobalScatter");
 
-			cs.SetInt(ID_numInputs, count);			// how to deal with random size of data ? over bound check where?
+			cs.SetInt(ID_numInputs, count);		
 			
 			// ---- Init ----
+			// check the count again.
+
+			if (ComputeHelper.CreateStructuredBuffer<uint>(ref sortedIndexBuffer, count))	
+			{
+				cs.SetBuffer(GScatterKernel, ID_SortedIndex, sortedIndexBuffer);
+			}
+
+			if (ComputeHelper.CreateStructuredBuffer<uint>(ref sortedKeyBuffer, count))		
+			{
+				cs.SetBuffer(GScatterKernel, ID_SortedKeys, sortedKeyBuffer); 
+			}
 				
-			if (ComputeHelper.CreateStructuredBuffer<uint>(ref BucketCounterBuffer, count))	// count not right
+			if (ComputeHelper.CreateStructuredBuffer<uint>(ref BucketCounterBuffer, count))	
 			{
 				cs.SetBuffer(InBlockKernel, ID_BucketCounter, BucketCounterBuffer);
 				cs.SetBuffer(OvBlockKernel, ID_BucketCounter, BucketCounterBuffer);
 			}
 
-			if (ComputeHelper.CreateStructuredBuffer<uint>(ref DstCounterBuffer, count))	// count not right
+			if (ComputeHelper.CreateStructuredBuffer<uint>(ref DstCounterBuffer, count))	
 			{
 				cs.SetBuffer(OvBlockKernel, ID_DstCounter, DstCounterBuffer);
 				cs.SetBuffer(GScatterKernel, ID_DstCounter, DstCounterBuffer);
 			}
 
-			if (ComputeHelper.CreateStructuredBuffer<uint>(ref GlobalPSumBuffer, count))	// count not right
+			if (ComputeHelper.CreateStructuredBuffer<uint>(ref GlobalPSumBuffer, count))	
 			{
 				cs.SetBuffer(InBlockKernel, ID_GlobalPSum, GlobalPSumBuffer);
 				cs.SetBuffer(GScatterKernel, ID_GlobalPSum, GlobalPSumBuffer);
 			}
-				
-			cs.SetBuffer(GScatterKernel ,ID_InputIndex, indexBuffer);
-				
-			cs.SetBuffer(InBlockKernel ,ID_InputKeys, keysBuffer);
-			cs.SetBuffer(OvBlockKernel ,ID_InputKeys, keysBuffer);
-			cs.SetBuffer(GScatterKernel ,ID_InputKeys, keysBuffer);
 			
-			for (int i = 0; i < 8; i++)				// 8-pass for 32-bit uint
+			
+			for (int i = 0; i < 8; i++) 
 			{
-				cs.SetInt(ID_numInputs, i);		// current iteration.
-				if (ComputeHelper.CreateStructuredBuffer<uint>(ref sortedIndexBuffer, count))	// count not right
-					cs.SetBuffer(GScatterKernel, ID_SortedIndex, sortedIndexBuffer);
-				if (ComputeHelper.CreateStructuredBuffer<uint>(ref sortedKeyBuffer, count))		// count not right
-					cs.SetBuffer(GScatterKernel, ID_SortedKeys, sortedKeyBuffer); 
+				cs.SetBuffer(GScatterKernel, ID_SortedIndex, sortedIndexBuffer);	// 1
+				cs.SetBuffer(GScatterKernel, ID_SortedKeys, sortedKeyBuffer);		// 2
+				cs.SetBuffer(GScatterKernel ,ID_InputIndex, indexBuffer);			// 3
+				cs.SetBuffer(InBlockKernel ,ID_InputKeys, keysBuffer);				// 4
+				cs.SetBuffer(OvBlockKernel ,ID_InputKeys, keysBuffer);				// 4
+				cs.SetBuffer(GScatterKernel ,ID_InputKeys, keysBuffer);				// 4
 				
+				cs.SetInt(ID_numInputs, i);		// current iteration.
 				ComputeHelper.Dispatch(cs, count, kernelIndex: InBlockKernel);
 				ComputeHelper.Dispatch(cs, count, kernelIndex: OvBlockKernel);
 				ComputeHelper.Dispatch(cs, count, kernelIndex: GScatterKernel);
@@ -102,6 +109,7 @@ namespace Seb.GPUSorting
 					
 				(sortedIndexBuffer, indexBuffer) = (indexBuffer, sortedIndexBuffer);
 				(sortedKeyBuffer, keysBuffer) = (keysBuffer, sortedKeyBuffer);
+				
 			}
 			// indexBuffer, keysBuffer now is result (EScan).
 		}
@@ -109,7 +117,6 @@ namespace Seb.GPUSorting
 		public void Release()
 		{
 			ComputeHelper.Release(sortedIndexBuffer, sortedKeyBuffer, BucketCounterBuffer, DstCounterBuffer, GlobalPSumBuffer);
-			scan.Release();
 		}
 		
 	}
