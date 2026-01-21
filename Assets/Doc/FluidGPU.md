@@ -96,26 +96,6 @@
 
 
 - GPU 4-bit Radix sort process 
-    - bit mask version
-    ```
-    gpuSort.Run() 
-        cs.Set();
-        ClearCounts.Kernel 
-
-        For i = 1 to 8                  // uint case
-            RadixCount.Kernel
-                [Unroll(16)] For j = 0 to 15  // 4-bit as 16 bucket
-                    if (bit == j) bitBucket[i * PNum + id.x] = 1;   // bitBucket[?]
-            END RadixCount.Kernel
-            scan.Run();                 // scan 16 buckets?
-            ScatterOutputs.Kernel;      // (?change)
-            CopyBack.Kernel;            // (?change)
-        END For
-
-    END gpuSort.Run()
-    ```
-
-    - bit bucket scan-in-group version
     ```
     For pass = 0 to 7 (8 pass for 32-bit sort)
         SetBuffer(para[]);      // switchin bind ping-pong buffer.

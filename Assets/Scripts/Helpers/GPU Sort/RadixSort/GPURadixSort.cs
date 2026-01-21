@@ -8,6 +8,7 @@ using UnityEditor.UI;
 // todo: sort the input.
 // todo: dispatch right number. (upper layer)
 // todo: is PNum needed?
+// todo: can GroupSize change?
 // do cell key and PIndex need init in pass loop? 
 	// no because data in pass loop is not the result; and will resulted after 8-pass.
 	// every sim_step reCalculating the cellkey-hash, and **PIndex**.
