@@ -18,8 +18,11 @@
                     externalForces.Kernel;
 
                     RunSpatial()
+                        spatialHash.Kernel
                         gpuSort.Run()               // pIndex, keyIndex
                         spatialOffsetsCalc.Run()    // startIndex
+                        reorder.Kernel
+                        copyback.Kernel
                     END RunSpatial()
 
                     density.Kernel;
