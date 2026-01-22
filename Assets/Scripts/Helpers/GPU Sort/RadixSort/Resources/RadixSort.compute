@@ -7,16 +7,17 @@
 // InputItems is particle number/id/PIndex	
 // InputKeys is cell key 
 
+// [1024 ^ 2] or [GroupNum * GroupSize] (?)
 RWStructuredBuffer<uint> InputIndex;	
 RWStructuredBuffer<uint> InputKeys;
 RWStructuredBuffer<uint> SortedIndex;
 RWStructuredBuffer<uint> SortedKeys;
 
-// [1024 * 16]  or [GroupNum * BucketNum]   
+// [1024 * 16] or [GroupNum * BucketNum]   
 RWStructuredBuffer<uint> BucketCounter;
 RWStructuredBuffer<uint> DstCounter;
 
-// [1024 ^ 2]   or [GroupNum * GroupSize]
+// [1024 ^ 2] or [GroupNum * GroupSize]
 RWStructuredBuffer<uint> GlobalPSum;    
 
 groupshared uint localPrefix[THREAD_NUM_X];
