@@ -294,3 +294,16 @@
 
 
 
+- Dispatch number analysis
+    - Radix origin
+    ```
+    PNum:           [1024 * 1024] or [arb]
+    Hash Size:      [2 * PNum]
+    BlockNums:      [ceil(PNum / GroupSize)]
+    TotalNums:      [BlockNums * GroupSize]
+    ConuterNums:    [BlockNums * BucketNum]
+    ```
+    - Radix in sim_lab
+    ```
+    ```
+    
