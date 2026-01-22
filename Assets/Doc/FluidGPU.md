@@ -305,5 +305,7 @@
     ```
     - Radix in sim_lab
     ```
+    padding at SH.init          // align to blockNum * blockSize 
+    
     ```
     

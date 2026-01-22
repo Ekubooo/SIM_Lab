@@ -4,31 +4,18 @@ using System.Collections.Generic;
 using UnityEngine;
 using Seb.Helpers;
 
-// todo: sort the input.
-// todo: dispatch number incorrect. (upper layer)
-// todo: padding in SPH.cs, SH.init()	?!
-// todo: the input should padding before invoke gpusort.run
-// todo: is PNum needed?
+// todo: dispatch number incorrect. (upper layer)(check)
+// todo: is PNum needed? (check compute shader)
 // todo: can GroupSize change?
 // todo: hash calculate incorrect. (now model by PNum)
-// do cell key and PIndex need init in pass loop? 
-	// no because data in pass loop is not the result; and will resulted after 8-pass.
-	// every sim_step reCalculating the cellkey-hash, and **PIndex**.
-
-// how to padding?
-	// padding at hash kernel: input size = sorting buffer.
-
-// where to init index? already has cellkeys.
-	// in hash kernel now.
+// todo: change para name at last. (when everything done)
 
 namespace Seb.GPUSorting
 {
 	public class GPURadixSort
 	{
-		// to be change
 		static readonly int ID_InputIndex = Shader.PropertyToID("InputIndex");
 		static readonly int ID_InputKeys = Shader.PropertyToID("InputKeys");
-		
 		static readonly int ID_SortedIndex = Shader.PropertyToID("SortedIndex");
 		static readonly int ID_SortedKeys = Shader.PropertyToID("SortedKeys");
 		static readonly int ID_BucketCounter = Shader.PropertyToID("BucketCounter");
@@ -46,32 +33,22 @@ namespace Seb.GPUSorting
 		ComputeBuffer DstCounterBuffer;
 		ComputeBuffer GlobalPSumBuffer;
 		
-		// new
-		private int InBlockKernel;
-		private int OvBlockKernel;
-		private int GScatterKernel;
-
-		private uint BlockNum;
-		private uint TotalNum;	// should init at SPH.cs
-		private uint counterNum;
-		
 		public void Run(ComputeBuffer indexBuffer, ComputeBuffer keysBuffer)
 		{
 			int count = indexBuffer.count;			// ?? to be padding
-													// input should padding before invoke
-													
-			InBlockKernel  = cs.FindKernel("InBlockRadix");
-			OvBlockKernel  = cs.FindKernel("OvBlockRadix");
-			GScatterKernel = cs.FindKernel("GlobalScatter");
+			// padding by SH.init now				// input should padding before invoke
+						
+			// where to put? is ok here?
+			int InBlockKernel  = cs.FindKernel("InBlockRadix");
+			int OvBlockKernel  = cs.FindKernel("OvBlockRadix");
+			int GScatterKernel = cs.FindKernel("GlobalScatter");
 			
-			calcSize(count);
-			BlockNum =(uint)(count / 1024);
+			int BlockNum = count / getGroupsize(cs);
+			int counterNum = 16 * BlockNum;
 
+			// ---- Init ----
 			cs.SetInt(ID_numInputs, count);		
 			
-			// ---- Init ----
-			// count not right
-
 			if (ComputeHelper.CreateStructuredBuffer<uint>(ref sortedIndexBuffer, count))	
 			{	// size equals to input
 				cs.SetBuffer(GScatterKernel, ID_SortedIndex, sortedIndexBuffer);
@@ -82,13 +59,13 @@ namespace Seb.GPUSorting
 				cs.SetBuffer(GScatterKernel, ID_SortedKeys, sortedKeyBuffer); 
 			}
 				
-			if (ComputeHelper.CreateStructuredBuffer<uint>(ref BucketCounterBuffer, count))	
+			if (ComputeHelper.CreateStructuredBuffer<uint>(ref BucketCounterBuffer, counterNum))	
 			{	// [1024 * 16] or [GroupNum * BucketNum] 
 				cs.SetBuffer(InBlockKernel, ID_BucketCounter, BucketCounterBuffer);
 				cs.SetBuffer(OvBlockKernel, ID_BucketCounter, BucketCounterBuffer);
 			}
 
-			if (ComputeHelper.CreateStructuredBuffer<uint>(ref DstCounterBuffer, count))	
+			if (ComputeHelper.CreateStructuredBuffer<uint>(ref DstCounterBuffer, counterNum))	
 			{	// [1024 * 16] or [GroupNum * BucketNum]
 				cs.SetBuffer(OvBlockKernel, ID_DstCounter, DstCounterBuffer);
 				cs.SetBuffer(GScatterKernel, ID_DstCounter, DstCounterBuffer);
@@ -110,19 +87,17 @@ namespace Seb.GPUSorting
 				cs.SetBuffer(OvBlockKernel ,ID_InputKeys, keysBuffer);				// 4
 				cs.SetBuffer(GScatterKernel ,ID_InputKeys, keysBuffer);				// 4
 				
-				cs.SetInt(ID_numInputs, i);		// current iteration.
-				// Dispatch count/GroupSize = count/1024.
-				// need: 1024 ^2
-				ComputeHelper.Dispatch(cs, count, kernelIndex: InBlockKernel);
-				// need: 16	* 1024	
-				ComputeHelper.Dispatch(cs, count, kernelIndex: OvBlockKernel);
-				// need: 1024 ^2
-				ComputeHelper.Dispatch(cs, count, kernelIndex: GScatterKernel);
+				cs.SetInt(ID_CurrIteration, i);		// current iteration.
 				
-				// ComputeHelper.Dispatch(cs, count, kernelIndex: cs.FindKernel("CopyBack"));
-					// need ! if not using setBuffer to switch buffer.
-					// options : setBuffer switch or kernel CopyBack switch.
-					
+				// Dispatch count/GroupSize = count/1024.
+				// need: 1024 ^2	or	[GroupNum * GroupSize]
+				ComputeHelper.Dispatch(cs, count, kernelIndex: InBlockKernel);
+				// need: 16	* 1024	or	[GroupNum * BucketNum]  
+				ComputeHelper.Dispatch(cs, counterNum, kernelIndex: OvBlockKernel);
+				// need: 1024 ^2	or	[GroupNum * GroupSize]
+				ComputeHelper.Dispatch(cs, count, kernelIndex: GScatterKernel);
+
+				// options : setBuffer switch or kernel CopyBack switch.
 				(sortedIndexBuffer, indexBuffer) = (indexBuffer, sortedIndexBuffer);
 				(sortedKeyBuffer, keysBuffer) = (keysBuffer, sortedKeyBuffer);
 				
@@ -135,12 +110,21 @@ namespace Seb.GPUSorting
 			ComputeHelper.Release(sortedIndexBuffer, sortedKeyBuffer, BucketCounterBuffer, DstCounterBuffer, GlobalPSumBuffer);
 		}
 
-		private void calcSize(int PNum/*, System.Action<uint> callback*/)
+		private int getGroupsize(ComputeShader cs, int kernelIndex = 0)
 		{
-			cs.GetKernelThreadGroupSizes(InBlockKernel, out uint x, out uint y ,out uint z);
-			BlockNum   = (uint)(Mathf.CeilToInt((float)PNum / (x * y * z)));
-			TotalNum   = BlockNum * x * y * z;
-			counterNum = BlockNum * 16;	
+			cs.GetKernelThreadGroupSizes(0, out uint x, out uint y ,out uint z);
+			return (int)(x * y * z);	
+		}
+
+		static int getKernelID(ComputeShader cs, Func<ComputeShader, int> callback)
+		{
+			return callback(cs);
+		}
+		void GetID(ComputeShader cs)
+		{
+			getKernelID(cs, (ComputeShader a) => { return a.FindKernel("InBlockRadix"); });
+			getKernelID(cs, (ComputeShader a) => { return a.FindKernel("OvBlockRadix"); });
+			getKernelID(cs, (ComputeShader a) => { return a.FindKernel("GlobalScatter"); });
 		}
 		
 	}

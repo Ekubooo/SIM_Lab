@@ -43,7 +43,7 @@ namespace Seb.Helpers
 		public void Run()
 		{
 			gpuSort.Run(SpatialIndices, SpatialKeys, (uint)(SpatialKeys.count - 1));
-			// RadixSort.Run(PIndex, cellkey, (uint)(cellkey.count - 1));
+			// radixSort.Run(SpatialIndices, SpatialKeys);
 			// now SpatialIndices, SpatialKeys are ordered.
 			
 			// change the name to avoid ambiguity

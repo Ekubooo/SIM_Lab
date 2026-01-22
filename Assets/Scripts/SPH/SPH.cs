@@ -98,7 +98,12 @@ namespace Seb.Fluid.Simulation
 			spawnData = spawner.GetSpawnData();
 			int numParticles = spawnData.points.Length;
 
-			spatialHash = new SpatialHash(numParticles);
+			// padding here.
+			// Using 1024 thread pre Groups for Radix GPU 
+			
+			int paddingNum = Mathf.CeilToInt((float)numParticles / 1024f) * 1024;
+			spatialHash = new SpatialHash(paddingNum);
+			// spatialHash = new SpatialHash(numParticles);
 			
 			// Create buffers
 			positionBuffer = CreateStructuredBuffer<float3>(numParticles);
