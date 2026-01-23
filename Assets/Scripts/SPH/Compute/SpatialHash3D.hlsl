@@ -50,6 +50,7 @@ int3 GetCell3D(float3 position, float radius)
 
 // Hash cell coordinate to a single unsigned integer
 // TODO: investigate better hashing functions
+// perfect hashing
 uint HashCell3D(int3 cell)
 {
 	const uint blockSize = 50;

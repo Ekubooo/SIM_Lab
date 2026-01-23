@@ -11,6 +11,7 @@ namespace Seb.Helpers
 		public ComputeBuffer SpatialOffsets;
 
 		readonly GPUCountSort gpuSort = new();
+		// readonly GPURadixSort gpuRadix = new();		// ready
 		readonly SpatialOffsetCalculator spatialOffsetsCalc = new();
 
 		public SpatialHash(int size)
@@ -43,7 +44,7 @@ namespace Seb.Helpers
 		public void Run()
 		{
 			gpuSort.Run(SpatialIndices, SpatialKeys, (uint)(SpatialKeys.count - 1));
-			// radixSort.Run(SpatialIndices, SpatialKeys);
+			// gpuRadix.Run(SpatialIndices, SpatialKeys);		// ready
 			// now SpatialIndices, SpatialKeys are ordered.
 			
 			// change the name to avoid ambiguity

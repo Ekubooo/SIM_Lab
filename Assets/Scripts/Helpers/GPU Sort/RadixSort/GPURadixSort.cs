@@ -6,6 +6,7 @@ using Seb.Helpers;
 
 // todo: dispatch number incorrect. (upper layer)(check)
 // todo: is PNum needed? (check compute shader)
+// todo: hash table size incorrect. different from counting sort.
 // todo: can GroupSize change?
 // todo: hash calculate incorrect. (now model by PNum)
 // todo: change para name at last. (when everything done)

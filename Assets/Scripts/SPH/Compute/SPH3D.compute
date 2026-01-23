@@ -23,10 +23,10 @@ RWStructuredBuffer<float3> PredictedPositions;
 RWStructuredBuffer<float3> Velocities;
 RWStructuredBuffer<float2> Densities; // Density, Near Density
 
-// Spatial hashing
+// Spatial hashing: cellKey, starIndex, PIndex.
 RWStructuredBuffer<uint> SpatialKeys;
 RWStructuredBuffer<uint> SpatialOffsets;
-StructuredBuffer<uint> SortedIndices;
+RWStructuredBuffer<uint> SortedIndices;
 
 RWStructuredBuffer<float3> Debug;
 
@@ -146,7 +146,8 @@ void ExternalForces(uint3 id : SV_DispatchThreadID)
 [numthreads(ThreadGroupSize, 1, 1)]
 void UpdateSpatialHash(uint3 id : SV_DispatchThreadID)
 {
-    SpatialOffsets[id.x] = id.x;
+    // SpatialOffsets[id.x] = id.x;
+    SortedIndices[id.x] = id.x;
     if (id.x >= numParticles)
         SpatialKeys[id.x] = -1;
     else
@@ -155,6 +156,7 @@ void UpdateSpatialHash(uint3 id : SV_DispatchThreadID)
         int3 cell = GetCell3D(PredictedPositions[index], smoothingRadius);
         uint hash = HashCell3D(cell);
         uint key = KeyFromHash(hash, numParticles);
+        // uint key = KeyFromHash(hash, numParticles * 2);
 
         SpatialKeys[id.x] = key;
     }

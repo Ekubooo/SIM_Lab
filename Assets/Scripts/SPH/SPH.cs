@@ -103,7 +103,6 @@ namespace Seb.Fluid.Simulation
 			
 			int paddingNum = Mathf.CeilToInt((float)numParticles / 1024f) * 1024;
 			spatialHash = new SpatialHash(paddingNum);
-			// spatialHash = new SpatialHash(numParticles);
 			
 			// Create buffers
 			positionBuffer = CreateStructuredBuffer<float3>(numParticles);
