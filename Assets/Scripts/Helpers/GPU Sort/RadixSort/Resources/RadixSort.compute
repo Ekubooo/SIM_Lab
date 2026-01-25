@@ -1,5 +1,5 @@
 #pragma kernel InBlockRadix
-#pragma kernel OverBlockRadix 
+#pragma kernel OvBlockRadix  
 #pragma kernel GlobalScatter
 
 #include "./RadixHelper.hlsl"
@@ -154,7 +154,7 @@ void InBlockRadix(uint GI : SV_GroupIndex, uint3 DTid : SV_DispatchThreadID, uin
 
 // 16 Dispatch,     1024 pre group。
 [numthreads(THREAD_NUM_X, 1, 1)]
-void OverBlockRadix(uint3 DTid : SV_DispatchThreadID,uint GI : SV_GroupIndex,uint3 Gid:SV_GroupID)
+void OvBlockRadix(uint3 DTid : SV_DispatchThreadID,uint GI : SV_GroupIndex,uint3 Gid:SV_GroupID)
 {
     localPrefix[GI.x] = (DTid.x < g_CounterNums ? BucketCounter[DTid.x] : 0);
     GroupMemoryBarrierWithGroupSync();

@@ -42,7 +42,7 @@ namespace Seb.Fluid.Simulation
 		public int densityTextureRes;
 
 		[Header("References")] public ComputeShader compute;
-		public Spawner3D spawner;
+		public SpawnerSPH spawner;
 
 		[HideInInspector] public RenderTexture DensityMap;
 		public Vector3 Scale => transform.localScale;
@@ -74,7 +74,8 @@ namespace Seb.Fluid.Simulation
 		const int foamUpdateKernel = 9;
 		const int foamReorderCopyBackKernel = 10;
 
-		SpatialHash spatialHash;
+		// SpatialHash spatialHash;
+		SHRadix spatialHash;
 
 		// State
 		bool isPaused;
@@ -82,7 +83,7 @@ namespace Seb.Fluid.Simulation
 		float smoothRadiusOld;
 		float simTimer;
 		bool inSlowMode;
-		Spawner3D.SpawnData spawnData;
+		SpawnerSPH.SpawnData spawnData;
 		Dictionary<ComputeBuffer, string> bufferNameLookup;
 
 		void Start()
@@ -102,7 +103,7 @@ namespace Seb.Fluid.Simulation
 			// Using 1024 thread pre Groups for Radix GPU 
 			
 			int paddingNum = Mathf.CeilToInt((float)numParticles / 1024f) * 1024;
-			spatialHash = new SpatialHash(paddingNum);
+			spatialHash = new SHRadix(paddingNum);
 			
 			// Create buffers
 			positionBuffer = CreateStructuredBuffer<float3>(numParticles);
@@ -392,7 +393,7 @@ namespace Seb.Fluid.Simulation
 			compute.SetFloat("bubbleScale", bubbleScale);
 		}
 
-		void SetInitialBufferData(Spawner3D.SpawnData spawnData)
+		void SetInitialBufferData(SpawnerSPH.SpawnData spawnData)
 		{
 			positionBuffer.SetData(spawnData.points);
 			predictedPositionsBuffer.SetData(spawnData.points);

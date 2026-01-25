@@ -6,7 +6,7 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/Fluid Raymarch.unity
+    path: Assets/Scenes/Fluid3D/Fluid Raymarch.unity
     guid: 7616a3045e516964f84fbfb2621b48c3
   m_configObjects: {}
   m_UseUCBPForAssetBundles: 0
