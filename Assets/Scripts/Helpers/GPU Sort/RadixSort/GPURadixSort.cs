@@ -47,7 +47,9 @@ namespace Seb.GPUSorting
 			int OvBlockKernel  = cs.FindKernel("OvBlockRadix");
 			int GScatterKernel = cs.FindKernel("GlobalScatter");
 			
-			int BlockNum = count / getGroupsize(cs);
+			// int BlockNum = count / getGroupsize(cs);
+			// int BlockNum = count / getGroupsize(cs, InBlockKernel);
+			int BlockNum = count / 1024;
 			int counterNum = 16 * BlockNum;
 
 			// ---- Init ----
@@ -93,7 +95,7 @@ namespace Seb.GPUSorting
 				cs.SetBuffer(OvBlockKernel ,ID_InputKeys, keysBuffer);				// 4
 				cs.SetBuffer(GScatterKernel ,ID_InputKeys, keysBuffer);				// 4
 				
-				cs.SetInt(ID_CurrIteration, i);		// current iteration.
+				cs.SetInt(ID_CurrIteration, i);	
 				
 				// Dispatch count/GroupSize = count/1024.
 				// need: 1024 ^2	or	[GroupNum * GroupSize]
@@ -116,21 +118,10 @@ namespace Seb.GPUSorting
 			ComputeHelper.Release(sortedIndexBuffer, sortedKeyBuffer, BucketCounterBuffer, DstCounterBuffer, GlobalPSumBuffer);
 		}
 
-		private int getGroupsize(ComputeShader cs, int kernelIndex = 0)
+		int getGroupsize(ComputeShader cs, int kernelIndex = 0)
 		{
-			cs.GetKernelThreadGroupSizes(0, out uint x, out uint y ,out uint z);
+			cs.GetKernelThreadGroupSizes(kernelIndex, out uint x, out uint y ,out uint z);
 			return (int)(x * y * z);	
-		}
-
-		static int getKernelID(ComputeShader cs, Func<ComputeShader, int> callback)
-		{
-			return callback(cs);
-		}
-		void GetID(ComputeShader cs)
-		{
-			getKernelID(cs, (ComputeShader a) => { return a.FindKernel("InBlockRadix"); });
-			getKernelID(cs, (ComputeShader a) => { return a.FindKernel("OvBlockRadix"); });
-			getKernelID(cs, (ComputeShader a) => { return a.FindKernel("GlobalScatter"); });
 		}
 		
 	}

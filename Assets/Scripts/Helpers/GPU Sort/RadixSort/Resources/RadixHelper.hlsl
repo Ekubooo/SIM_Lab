@@ -1,6 +1,5 @@
 #define RADIX_R 16
 #define THREAD_NUM_X 1024
-#define GROUP_SIZE 1024
 
 uint get4Bits(uint num, int i)
 {

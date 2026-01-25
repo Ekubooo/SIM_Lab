@@ -24,10 +24,12 @@ groupshared uint localPrefix[THREAD_NUM_X];
 
 uint numInputs;
 uint currIteration;
-uint g_BlocksNums;          // = 1024
-uint g_CounterNums;         // = 16 * 1024
-static const int GroupSize = 256;
 
+// = 1024
+uint g_BlocksNums;
+
+// = 16 * 1024
+uint g_CounterNums;         
 
 void PrefixSumLocal(uint IGid : SV_GroupIndex, uint IScanIndex)
 {
@@ -145,7 +147,7 @@ void InBlockRadix(uint GI : SV_GroupIndex, uint3 DTid : SV_DispatchThreadID, uin
         localPrefix[GI] = (digit == r ? 1 : 0);
         GroupMemoryBarrierWithGroupSync();
         PrefixSumLocal(GI, r * g_BlocksNums + Gid.x);
-        // now localPrefix[] is EScan of current group.
+        // now localPrefix[] is EScan of current block.
         
         if(digit == r)  GlobalPSum[DTid.x] = localPrefix[GI];
         GroupMemoryBarrierWithGroupSync();
@@ -191,7 +193,6 @@ void GlobalScatter(uint3 DTid : SV_DispatchThreadID,uint3 Gid:SV_GroupID)
 {
     uint digit = get4Bits(InputKeys[DTid.x], currIteration);
 
-    // Global Scatter
     uint counterIndex = digit * g_BlocksNums + Gid.x;
     uint globalOffset = GlobalPSum[DTid.x] + DstCounter[counterIndex];
     SortedKeys[globalOffset] = InputKeys[DTid.x];
