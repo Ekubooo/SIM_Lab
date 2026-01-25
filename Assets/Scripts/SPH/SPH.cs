@@ -329,7 +329,8 @@ namespace Seb.Fluid.Simulation
 		{
 			Dispatch(compute, positionBuffer.count, kernelIndex: externalForcesKernel);
 
-			Dispatch(compute, positionBuffer.count, kernelIndex: spatialHashKernel);
+			// Dispatch(compute, positionBuffer.count, kernelIndex: spatialHashKernel);	// incorrect dispatch.
+			Dispatch(compute, spatialHash.SpatialKeys.count, kernelIndex: spatialHashKernel);	// incorrect dispatch.
 			spatialHash.Run();
 			
 			Dispatch(compute, positionBuffer.count, kernelIndex: reorderKernel);

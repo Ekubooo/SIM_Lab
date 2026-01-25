@@ -25,6 +25,8 @@ namespace Seb.GPUSorting
 		
 		static readonly int ID_CurrIteration = Shader.PropertyToID("currIteration");	
 		static readonly int ID_numInputs = Shader.PropertyToID("numInputs");	
+		static readonly int ID_blocksNums = Shader.PropertyToID("g_BlocksNums");	
+		static readonly int ID_counterNums = Shader.PropertyToID("g_CounterNums");	
 		
 		readonly ComputeShader cs = ComputeHelper.LoadComputeShader("RadixSort");	
 		
@@ -50,6 +52,8 @@ namespace Seb.GPUSorting
 
 			// ---- Init ----
 			cs.SetInt(ID_numInputs, count);		
+			cs.SetInt(ID_blocksNums, BlockNum);		
+			cs.SetInt(ID_counterNums, counterNum);		
 			
 			if (ComputeHelper.CreateStructuredBuffer<uint>(ref sortedIndexBuffer, count))	
 			{	// size equals to input
@@ -93,11 +97,11 @@ namespace Seb.GPUSorting
 				
 				// Dispatch count/GroupSize = count/1024.
 				// need: 1024 ^2	or	[GroupNum * GroupSize]
-				ComputeHelper.Dispatch(cs, count, kernelIndex: InBlockKernel);
+				ComputeHelper.Dispatch(cs, numIterationsX: count, kernelIndex: InBlockKernel);
 				// need: 16	* 1024	or	[GroupNum * BucketNum]  
-				ComputeHelper.Dispatch(cs, counterNum, kernelIndex: OvBlockKernel);
+				ComputeHelper.Dispatch(cs, numIterationsX: counterNum, kernelIndex: OvBlockKernel);
 				// need: 1024 ^2	or	[GroupNum * GroupSize]
-				ComputeHelper.Dispatch(cs, count, kernelIndex: GScatterKernel);
+				ComputeHelper.Dispatch(cs, numIterationsX: count, kernelIndex: GScatterKernel);
 
 				// options : setBuffer switch or kernel CopyBack switch.
 				(sortedIndexBuffer, indexBuffer) = (indexBuffer, sortedIndexBuffer);
