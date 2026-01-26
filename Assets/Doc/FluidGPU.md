@@ -96,6 +96,7 @@
 
 
 - GPU 4-bit Radix sort process 
+    - origin details
     ```
     For pass = 0 to 7 (8 pass for 32-bit sort)
         SetBuffer(para[]);      // switchin bind ping-pong buffer.
@@ -139,6 +140,18 @@
 
     END For
 
+    ```
+
+    - in-use
+    ```
+    Padding by GroupSize.
+    For pass = 0 to 7
+        cs.SetBuffer();
+        InBlockRadix.Kernel     // 1024 Dispatch
+        scan.Run(Counter);      // Over Block scan
+        GlobalScatter.Kernel    // 1024 Dispatch
+        (input, result) = (result, input);      // switch
+    END For
     ```
 
 - Scan process
