@@ -24,9 +24,6 @@ groupshared uint localPrefix[THREAD_NUM_X];
 uint numInputs;
 uint currIteration;
 uint g_BlocksNums;
-uint g_CounterNums;         
-// g_BlocksNums = 1024, g_CounterNums= 16 * 1024
-
 
 void PrefixSumLocal(uint IGid : SV_GroupIndex, uint IScanIndex)
 {

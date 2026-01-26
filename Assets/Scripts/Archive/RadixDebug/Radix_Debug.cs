@@ -4,8 +4,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using Seb.Helpers;
 
-// todo: dispatch number incorrect. (check)
-// todo: is PNum needed? (check compute shader)
 // todo: can GroupSize change?
 // todo: change para name at last. (when everything done)
 
@@ -37,10 +35,10 @@ namespace Seb.GPUSorting
 		
 		public void Run(ComputeBuffer indexBuffer, ComputeBuffer keysBuffer)
 		{
-			int count = indexBuffer.count;			// ?? to be padding
-			// padding by SH.init now				// input should padding before invoke
-						
-			// where to put? is ok here?
+			int count = indexBuffer.count;			
+			// padding by SH.init now
+			// input should padding before invoke
+			
 			int InBlockKernel  = cs.FindKernel("InBlockRadix");
 			int OvBlockKernel  = cs.FindKernel("OvBlockRadix");
 			int GScatterKernel = cs.FindKernel("GlobalScatter");
@@ -124,11 +122,3 @@ namespace Seb.GPUSorting
 		
 	}
 }
-
-
-// 1024 groups, 256 thread per groups
-// --------------- 1024 group ----------------
-// ---256 uint---		---256 uint---		 :
-// 16			:  ...	16		     :	...	 :
-// --------------		--------------		 :
-// -------------------------------------------

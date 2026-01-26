@@ -10,8 +10,7 @@ namespace Seb.Helpers
 		public ComputeBuffer SpatialIndices;
 		public ComputeBuffer SpatialOffsets;
 
-		// readonly GPUCountSort gpuSort = new();	// old
-		readonly GPURadixSort gpuSort = new();		// new
+		readonly GPURadixSort gpuSort = new();		
 		readonly SpatialOffsetCalculator spatialOffsetsCalc = new();
 
 		public SHRadix(int size)
@@ -43,11 +42,7 @@ namespace Seb.Helpers
 		
 		public void Run()
 		{
-			// gpuSort.Run(SpatialIndices, SpatialKeys, (uint)(SpatialKeys.count - 1));			// old
-			gpuSort.Run(SpatialIndices, SpatialKeys);									// new 
-			// now SpatialIndices, SpatialKeys are ordered.
-			
-			// change the name to avoid ambiguity
+			gpuSort.Run(SpatialIndices, SpatialKeys);	
 			spatialOffsetsCalc.Run(true, SpatialKeys, SpatialOffsets);
 		}
 

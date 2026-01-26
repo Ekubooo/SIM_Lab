@@ -12,8 +12,6 @@ namespace Seb.GPUSorting
 		static readonly int ID_InputKeys = Shader.PropertyToID("InputKeys");
 		static readonly int ID_SortedIndex = Shader.PropertyToID("SortedIndex");
 		static readonly int ID_SortedKeys = Shader.PropertyToID("SortedKeys");
-		
-		// 我们将复用 DstCounterBuffer 来做 BucketCounter，因为 InBlock写完后，GlobalScatter只读它的前缀和结果
 		static readonly int ID_BucketCounter = Shader.PropertyToID("BucketCounter"); 
 		static readonly int ID_DstCounter = Shader.PropertyToID("DstCounter");
 		static readonly int ID_GlobalPSum = Shader.PropertyToID("GlobalPSum");
@@ -21,14 +19,12 @@ namespace Seb.GPUSorting
 		static readonly int ID_CurrIteration = Shader.PropertyToID("currIteration");	
 		static readonly int ID_numInputs = Shader.PropertyToID("numInputs");	
 		static readonly int ID_blocksNums = Shader.PropertyToID("g_BlocksNums");	
-		// static readonly int ID_counterNums = Shader.PropertyToID("g_CounterNums");	// no longer need
 		
 		readonly ComputeShader cs = ComputeHelper.LoadComputeShader("RadixSort");
 		readonly Scan scan = new Scan(); 
 		
 		ComputeBuffer sortedIndexBuffer;
 		ComputeBuffer sortedKeyBuffer;
-		// ComputeBuffer BucketCounterBuffer;	// no longer need
 		ComputeBuffer DstCounterBuffer;
 		ComputeBuffer GlobalPSumBuffer;
 		
@@ -44,7 +40,6 @@ namespace Seb.GPUSorting
 			
 			cs.SetInt(ID_numInputs, count);		
 			cs.SetInt(ID_blocksNums, BlockNum);		
-			// cs.SetInt(ID_counterNums, counterNum); // 不需要了
 			
 			// ---- Create Buffers ----
 			if (ComputeHelper.CreateStructuredBuffer<uint>(ref sortedIndexBuffer, count))	
@@ -56,18 +51,10 @@ namespace Seb.GPUSorting
 			{
 				cs.SetBuffer(GScatterKernel, ID_SortedKeys, sortedKeyBuffer); 
 			}
-				
-			// 我们只需要一个 Counter Buffer。
-			// InBlockRadix 往里面写每个Block的计数。
-			// Scan 对其做前缀和。
-			// GlobalScatter 读取前缀和作为 Offset。
 			
 			if (ComputeHelper.CreateStructuredBuffer<uint>(ref DstCounterBuffer, counterNum))	
 			{
-				// InBlockKernel 原本写入 BucketCounter，我们让它直接写入 DstCounterBuffer
 				cs.SetBuffer(InBlockKernel, ID_BucketCounter, DstCounterBuffer);
-				
-				// GlobalScatter 读取 DstCounter
 				cs.SetBuffer(GScatterKernel, ID_DstCounter, DstCounterBuffer);
 			}
 
