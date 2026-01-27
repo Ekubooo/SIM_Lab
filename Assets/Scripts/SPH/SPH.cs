@@ -78,13 +78,16 @@ namespace Seb.Fluid.Simulation
 		SHRadix spatialHash;
 
 		// State
-		bool isPaused;
-		bool pauseNextFrame;
+		internal bool isPaused;
+		internal bool pauseNextFrame;
 		float smoothRadiusOld;
-		float simTimer;
-		bool inSlowMode;
+		float simTimer;		
+		internal bool inSlowMode;
 		SpawnerSPH.SpawnData spawnData;
 		Dictionary<ComputeBuffer, string> bufferNameLookup;
+
+		internal float RotateSpeed = 0f;
+		InputHelper inputHelper;
 
 		void Start()
 		{
@@ -104,6 +107,7 @@ namespace Seb.Fluid.Simulation
 			
 			int paddingNum = Mathf.CeilToInt((float)numParticles / 1024f) * 1024;
 			spatialHash = new SHRadix(paddingNum);
+			inputHelper = new InputHelper();
 			
 			// Create buffers
 			positionBuffer = CreateStructuredBuffer<float3>(numParticles);
@@ -407,35 +411,19 @@ namespace Seb.Fluid.Simulation
 
 		void HandleInput()
 		{
-			if (Input.GetKeyDown(KeyCode.Space))
-			{
-				isPaused = !isPaused;
-			}
-
-			if (Input.GetKeyDown(KeyCode.RightArrow))
-			{
-				isPaused = false;
-				pauseNextFrame = true;
-			}
-
+			inputHelper.OnUpdate(this);
+			
 			if (Input.GetKeyDown(KeyCode.R))
 			{
 				pauseNextFrame = true;
 				SetInitialBufferData(spawnData);
+				if (renderToTex3D) RunSimulationFrame(0);
 				// Run single frame of sim with deltaTime = 0 to initialize density texture
 				// (so that display can work even if paused at start)
-				if (renderToTex3D)
-				{
-					RunSimulationFrame(0);
-				}
+				
 			}
-
-			if (Input.GetKeyDown(KeyCode.Q))
-			{
-				inSlowMode = !inSlowMode;
-			}
+		
 		}
-
 		private float ActiveTimeScale => inSlowMode ? slowTimeScale : normalTimeScale;
 
 		void OnDestroy()
