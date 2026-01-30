@@ -11,13 +11,10 @@ RWStructuredBuffer<uint> InputIndex;
 RWStructuredBuffer<uint> InputKeys;
 RWStructuredBuffer<uint> SortedIndex;
 RWStructuredBuffer<uint> SortedKeys;
+RWStructuredBuffer<uint> GlobalPSum;    
 
 // [1024 * 16] or [GroupNum * BucketNum]   
-RWStructuredBuffer<uint> BucketCounter;
 RWStructuredBuffer<uint> DstCounter;
-
-// [1024 ^ 2] or [GroupNum * GroupSize]
-RWStructuredBuffer<uint> GlobalPSum;    
 
 groupshared uint localPrefix[THREAD_NUM_X];
 
@@ -49,7 +46,7 @@ void PrefixSumLocal(uint IGid : SV_GroupIndex, uint IScanIndex)
 
     if (IGid == 0)
     {
-        BucketCounter[IScanIndex] = localPrefix[totalNum - 1];
+        DstCounter[IScanIndex] = localPrefix[totalNum - 1];
         localPrefix[totalNum - 1] = 0;
     }
     

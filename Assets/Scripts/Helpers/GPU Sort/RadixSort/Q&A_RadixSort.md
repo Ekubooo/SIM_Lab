@@ -1,9 +1,7 @@
 ### QA for Radix.cs
 
 - todo: dispatch number incorrect. (upper layer)(check)
-- todo: is PNum needed? (check compute shader)
 - todo: can GroupSize change?
-- todo: hash calculate incorrect. (now model by PNum)
 - todo: change para name at last. (when everything done)
 - do cell key and PIndex need init in pass loop?
   - no because data in pass loop is not the result; and will resulted after 8-pass.

@@ -504,7 +504,7 @@ MonoBehaviour:
   gradientResolution: 50
   velocityDisplayMax: 8
   meshResolution: 3
-  sim: {fileID: 0}
+  sim: {fileID: 647353486}
   shaderShaded: {fileID: 4800000, guid: 638bb1bdb9b8e374e8a5cbcd595e3973, type: 3}
   shaderBillboard: {fileID: 4800000, guid: 13de1318fe7184e48bdf807b928b641b, type: 3}
 --- !u!4 &1294730517

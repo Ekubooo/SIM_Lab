@@ -54,7 +54,7 @@ namespace Seb.GPUSorting
 			
 			if (ComputeHelper.CreateStructuredBuffer<uint>(ref DstCounterBuffer, counterNum))	
 			{
-				cs.SetBuffer(InBlockKernel, ID_BucketCounter, DstCounterBuffer);
+				cs.SetBuffer(InBlockKernel, ID_DstCounter, DstCounterBuffer);
 				cs.SetBuffer(GScatterKernel, ID_DstCounter, DstCounterBuffer);
 			}
 

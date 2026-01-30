@@ -300,13 +300,6 @@
     ```
 
 
-
-
-
-
-
-
-
 - Dispatch number analysis
     - Radix origin
     ```
@@ -316,7 +309,7 @@
     TotalNums:      [BlockNums * GroupSize]
     ConuterNums:    [BlockNums * BucketNum]
     ```
-    - Radix in sim_lab
+    - Radix in SIM_Lab
     ```
     padding at SH.init          // align to blockNum * blockSize 
     
