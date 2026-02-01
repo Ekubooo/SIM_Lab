@@ -8,7 +8,7 @@ using static Seb.Helpers.ComputeHelper;
 
 namespace Seb.Fluid.Simulation
 {
-	public class FluidSim : MonoBehaviour
+	public class FluidSim : FluidBase
 	{
 		public event Action<FluidSim> SimulationInitCompleted;
 
@@ -55,7 +55,24 @@ namespace Seb.Fluid.Simulation
 		public ComputeBuffer velocityBuffer { get; private set; }
 		public ComputeBuffer densityBuffer { get; private set; }
 		public ComputeBuffer predictedPositionsBuffer;
+		
 		public ComputeBuffer debugBuffer { get; private set; }
+		
+		// new
+		public override ComputeBuffer PositionBuffer => positionBuffer;
+		public override ComputeBuffer VelocityBuffer => velocityBuffer;
+		public override ComputeBuffer DebugBuffer => debugBuffer;
+
+		// Foam
+		public override bool FoamActive => foamActive;
+		public override ComputeBuffer FoamBuffer => foamBuffer;
+		public override ComputeBuffer FoamCountBuffer => foamCountBuffer;
+		public override int MaxFoamParticleCount => maxFoamParticleCount;
+		public override int BubbleClassifyMinNeighbours => bubbleClassifyMinNeighbours;
+		public override int SprayClassifyMaxNeighbours => sprayClassifyMaxNeighbours;
+		
+		public override int ActiveParticleCount => positionBuffer != null ? positionBuffer.count : 0;
+		
 
 		ComputeBuffer sortTarget_positionBuffer;
 		ComputeBuffer sortTarget_velocityBuffer;
@@ -263,7 +280,8 @@ namespace Seb.Fluid.Simulation
 				RunSimulationFrame(0);
 			}
 
-			SimulationInitCompleted?.Invoke(this);
+			// SimulationInitCompleted?.Invoke(this);
+			NotifyInitCompleted();
 		}
 
 		void Update()

@@ -15,8 +15,8 @@ namespace Seb.Fluid.Rendering
 		public Shader shaderBillboard;
 		public ComputeShader copyCountToArgsCompute;
 
-		FluidSim sim;
-		// SPH sim;
+		FluidBase sim;
+		
 		Material mat;
 		Mesh mesh;
 		ComputeBuffer argsBuffer;
@@ -24,30 +24,28 @@ namespace Seb.Fluid.Rendering
 
 		void Awake()
 		{
-			sim = FindObjectOfType<FluidSim>();		// old
-			// sim = FindObjectOfType<SPH>();		// new
+			sim = FindObjectOfType<FluidBase>();		
 			sim.SimulationInitCompleted += Init;
 		}
-
-		void Init(/*SPH*/ FluidSim sim)	
+		void Init(FluidBase sim)	
 		{
 			mat = new Material(shaderBillboard);
 			mesh = QuadGenerator.GenerateQuadMesh();
 			bounds = new Bounds(Vector3.zero, Vector3.one * 1000);
 
-			ComputeHelper.CreateArgsBuffer(ref argsBuffer, mesh, sim.maxFoamParticleCount);
-			copyCountToArgsCompute.SetBuffer(0, "CountBuffer", sim.foamCountBuffer);
+			ComputeHelper.CreateArgsBuffer(ref argsBuffer, mesh, sim.MaxFoamParticleCount);
+			copyCountToArgsCompute.SetBuffer(0, "CountBuffer", sim.FoamCountBuffer);
 			copyCountToArgsCompute.SetBuffer(0, "ArgsBuffer", argsBuffer);
-			mat.SetBuffer("Particles", sim.foamBuffer);
+			mat.SetBuffer("Particles", sim.FoamBuffer);
 		}
 
 		void LateUpdate()
 		{
-			if (sim.foamActive)
+			if (sim.FoamActive)
 			{
 				mat.SetFloat("debugParam", debugParam);
-				mat.SetInt("bubbleClassifyMinNeighbours", sim.bubbleClassifyMinNeighbours);
-				mat.SetInt("sprayClassifyMaxNeighbours", sim.sprayClassifyMaxNeighbours);
+				mat.SetInt("bubbleClassifyMinNeighbours", sim.BubbleClassifyMinNeighbours);
+				mat.SetInt("sprayClassifyMaxNeighbours", sim.SprayClassifyMaxNeighbours);
 				mat.SetFloat("scale", scale * 0.01f);
 
 				if (autoDraw)
