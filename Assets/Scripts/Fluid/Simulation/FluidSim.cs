@@ -107,7 +107,9 @@ namespace Seb.Fluid.Simulation
 
 		void Start()
 		{
-			Debug.Log("Controls: Space = Play/Pause, Q = SlowMode, R = Reset");
+			Debug.Log("Controls: Space = Play/Pause, S = SlowMode, R = Reset");
+			Debug.Log("Controls: Q/E = Rotation, G = Gravity");
+			
 			isPaused = false;
 
 			Initialize();

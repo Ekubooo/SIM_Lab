@@ -58,7 +58,6 @@ namespace Seb.Fluid.Simulation
 		public ComputeBuffer debugBuffer { get; private set; }
 		
 		
-				
 		// new
 		public override ComputeBuffer PositionBuffer => positionBuffer;
 		public override ComputeBuffer VelocityBuffer => velocityBuffer;
@@ -75,7 +74,6 @@ namespace Seb.Fluid.Simulation
 		public override int ActiveParticleCount => positionBuffer != null ? positionBuffer.count : 0;
 
 		
-
 		ComputeBuffer sortTarget_positionBuffer;
 		ComputeBuffer sortTarget_velocityBuffer;
 		ComputeBuffer sortTarget_predictedPositionsBuffer;
@@ -110,7 +108,8 @@ namespace Seb.Fluid.Simulation
 
 		void Start()
 		{
-			Debug.Log("Controls: Space = Play/Pause, Q = SlowMode, R = Reset");
+			Debug.Log("Controls: Space = Play/Pause, S = SlowMode, R = Reset");
+			Debug.Log("Controls: Q/E = Rotation, G = Gravity");
 			isPaused = false;
 
 			Initialize();
