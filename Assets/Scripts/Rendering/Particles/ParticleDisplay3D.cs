@@ -21,8 +21,8 @@ namespace Seb.Fluid.Rendering
 		public float velocityDisplayMax;
 		public int meshResolution;
 
-		[Header("References")] public FluidSim sim;			// old
-		// [Header("References")] public SPH sim;					// new
+		[Header("References")] public FluidBase sim;			
+		
 		public Shader shaderShaded;
 		public Shader shaderBillboard;
 
@@ -53,7 +53,7 @@ namespace Seb.Fluid.Rendering
 				{
 					if (mode == DisplayMode.Billboard) mesh = QuadGenerator.GenerateQuadMesh();
 					else mesh = SphereGenerator.GenerateSphereMesh(meshResolution);
-					ComputeHelper.CreateArgsBuffer(ref argsBuffer, mesh, sim.positionBuffer.count);
+					ComputeHelper.CreateArgsBuffer(ref argsBuffer, mesh, sim.PositionBuffer.count);
 
 					mat = mode switch
 					{
@@ -63,9 +63,9 @@ namespace Seb.Fluid.Rendering
 					};
 
 
-					mat.SetBuffer("Positions", sim.positionBuffer);
-					mat.SetBuffer("Velocities", sim.velocityBuffer);
-					mat.SetBuffer("DebugBuffer", sim.debugBuffer);
+					mat.SetBuffer("Positions", sim.PositionBuffer);
+					mat.SetBuffer("Velocities", sim.VelocityBuffer);
+					mat.SetBuffer("DebugBuffer", sim.DebugBuffer);
 				}
 			}
 
