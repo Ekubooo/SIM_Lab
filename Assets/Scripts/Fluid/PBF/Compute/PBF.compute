@@ -605,3 +605,40 @@ void WhiteParticlePrepareNextFrame(uint3 id : SV_DispatchThreadID)
         WhiteParticleCounters[0] = WhiteParticleCounters[1];
     }
 }
+
+
+[numthreads(ThreadGroupSize, 1, 1)]
+void ApplyAndPredict()
+{
+    
+}
+
+[numthreads(ThreadGroupSize, 1, 1)]
+void LagrangeOperator()
+{
+    
+}
+
+[numthreads(ThreadGroupSize, 1, 1)]
+void deltaPos()
+{
+    
+}
+
+[numthreads(ThreadGroupSize, 1, 1)]
+void CDaR()
+{
+    
+}
+
+[numthreads(ThreadGroupSize, 1, 1)]
+void UpdatePredict()
+{
+    
+}
+
+[numthreads(ThreadGroupSize, 1, 1)]
+void Update3V1P()
+{
+    
+}
