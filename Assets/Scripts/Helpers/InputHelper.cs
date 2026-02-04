@@ -9,11 +9,11 @@ namespace Seb.Helpers
     {
         public float tempSpeed = 0f;
         
-        public void OnUpdate(SPH owner)
+        public void OnUpdate(FluidBase owner)
         {
-            // HandleRotation(ref owner, owner.transform);
-            // HandleStates(owner);
+            // todo: Fluidbasic impl;
         }
+        
         public void OnUpdate(FluidSim owner)
         {
             HandleRotation(ref owner);
