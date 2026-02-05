@@ -1,9 +1,9 @@
 using System;
 using UnityEngine;
 using Seb.GPUSorting;
+using Seb.Helpers;
 using Unity.Mathematics;
 using System.Collections.Generic;
-using Seb.Helpers;
 using static Seb.Helpers.ComputeHelper;
 
 namespace Seb.Fluid.Simulation
@@ -346,18 +346,26 @@ namespace Seb.Fluid.Simulation
 
 		void RunSimulationStep()
 		{
-			Dispatch(compute, positionBuffer.count, kernelIndex: externalForcesKernel);
-
-			Dispatch(compute, positionBuffer.count, kernelIndex: spatialHashKernel);
-			spatialHash.Run();
+			ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// predicatePos
+			spatialHash.Run(); 
+			ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: reorderKernel);	
+			ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: reorderCopybackKernel);	
 			
-			Dispatch(compute, positionBuffer.count, kernelIndex: reorderKernel);
-			Dispatch(compute, positionBuffer.count, kernelIndex: reorderCopybackKernel);
+			for (int k = 0; k < 3 /*|| err > 0.001*/ ; k++) 
+			{ 
+				ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// LagrangeOperatorKernel
+				ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// DeltaPosKernel
+				ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// collision detection (?in DeltaPosKernel)
+				ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// ApplyUpdateKernel
+			}
+			
+			ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: 999);			// updateVelocityKernel
+			
+			/* (option) XSPH: Viscosity and Vorticity) */
+			ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: viscosityKernel);	
+			ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: 999);			// VorticityKernel
+			ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: updatePositionsKernel);	
 
-			Dispatch(compute, positionBuffer.count, kernelIndex: densityKernel);
-			Dispatch(compute, positionBuffer.count, kernelIndex: pressureKernel);
-			if (viscosityStrength != 0) Dispatch(compute, positionBuffer.count, kernelIndex: viscosityKernel);
-			Dispatch(compute, positionBuffer.count, kernelIndex: updatePositionsKernel);
 		}
 
 		void UpdateSmoothingConstants()
