@@ -214,6 +214,8 @@ GameObject:
   - component: {fileID: 647353484}
   - component: {fileID: 647353483}
   - component: {fileID: 647353482}
+  - component: {fileID: 647353487}
+  - component: {fileID: 647353486}
   m_Layer: 0
   m_Name: Simulation
   m_TagString: Untagged
@@ -236,7 +238,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 647353481}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f99a384512b94654fbeb7c06c43f81ba, type: 3}
   m_Name: 
@@ -264,7 +266,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 647353481}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c8b3b79f98be3f34e8fefade4cef2ade, type: 3}
   m_Name: 
@@ -312,6 +314,74 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &647353486
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 647353481}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 70b50ab58a0c762489b66fb84a4fb1ac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Seb.Fluid.Simulation.SpawnerPBF
+  particleSpawnDensity: 600
+  initialVel:
+    x: 0
+    y: 0
+    z: 0
+  jitterStrength: 0
+  showSpawnBounds: 1
+  spawnRegions:
+  - centre: {x: -8.3, y: -1.3, z: 3.65}
+    size: 7
+    debugDisplayCol: {r: 1, g: 0.27058825, b: 0.09019608, a: 0}
+  - centre: {x: -8.3, y: -1.3, z: -3.65}
+    size: 7
+    debugDisplayCol: {r: 0.09019608, g: 0.3803922, b: 1, a: 0}
+  debug_num_particles: 410758
+  debug_spawn_volume: 686
+--- !u!114 &647353487
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 647353481}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d2deb9657d1a3bd46ba83adcfe31009b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Seb.Fluid.Simulation.PBF
+  normalTimeScale: 1
+  slowTimeScale: 0.1
+  maxTimestepFPS: 60
+  iterationsPerFrame: 3
+  gravity: -10
+  smoothingRadius: 0.2
+  targetDensity: 630
+  pressureMultiplier: 288
+  nearPressureMultiplier: 2.16
+  viscosityStrength: 0
+  collisionDamping: 0.95
+  foamActive: 0
+  maxFoamParticleCount: 1280000
+  trappedAirSpawnRate: 70
+  spawnRateFadeInTime: 0.75
+  spawnRateFadeStartTime: 0
+  trappedAirVelocityMinMax: {x: 5, y: 25}
+  foamKineticEnergyMinMax: {x: 15, y: 80}
+  bubbleBuoyancy: 1.4
+  sprayClassifyMaxNeighbours: 5
+  bubbleClassifyMinNeighbours: 15
+  bubbleScale: 0.3
+  bubbleChangeScaleSpeed: 7
+  renderToTex3D: 0
+  densityTextureRes: 1
+  compute: {fileID: 7200000, guid: 4e27bd7a1df0cbc4fbcd78631503a696, type: 3}
+  spawner: {fileID: 647353483}
+  DensityMap: {fileID: 0}
 --- !u!1 &881847624
 GameObject:
   m_ObjectHideFlags: 0

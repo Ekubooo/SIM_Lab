@@ -99,7 +99,8 @@ namespace Seb.Fluid.Simulation
 		float smoothRadiusOld;
 		float simTimer;
 		internal bool inSlowMode;
-		Spawner3D.SpawnData spawnData;
+		Spawner3D.SpawnData spawnData;	
+		// SpawnerPBF.SpawnData spawnData;		// issue
 		Dictionary<ComputeBuffer, string> bufferNameLookup;
 		
 		internal float RotateSpeed = 0f;
