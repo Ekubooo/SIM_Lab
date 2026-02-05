@@ -123,6 +123,10 @@ namespace Seb.Fluid.Simulation
 			spatialHash = new SpatialHash(numParticles);
 			inputHelper = new InputHelper();
 			
+			// kernel id here
+			int LOkernel = compute.FindKernel("LagrangeOperator");
+			// ... 
+			
 			// Create buffers
 			positionBuffer = CreateStructuredBuffer<float3>(numParticles);
 			predictedPositionsBuffer = CreateStructuredBuffer<float3>(numParticles);

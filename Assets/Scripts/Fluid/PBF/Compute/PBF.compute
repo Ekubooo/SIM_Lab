@@ -2,20 +2,19 @@
 #pragma kernel UpdateSpatialHash
 #pragma kernel Reorder
 #pragma kernel ReorderCopyBack;
-#pragma kernel CalculateDensities
-#pragma kernel CalculatePressureForce
 #pragma kernel CalculateViscosity
-#pragma kernel UpdatePositions
+
+#pragma kernel LagrangeOperator
+// todo here ... 
+
 #pragma kernel UpdateDensityTexture
 #pragma kernel UpdateWhiteParticles
 #pragma kernel WhiteParticlePrepareNextFrame;
 
-// Includes
 #include "./PBF3D.hlsl"
 #include "./SpatialHash3D.hlsl"
 
 static const int ThreadGroupSize = 256;
-
 
 // Buffers
 RWStructuredBuffer<float3> Positions;
@@ -626,7 +625,7 @@ void deltaPos()
 }
 
 [numthreads(ThreadGroupSize, 1, 1)]
-void CDaR()
+void Collision()
 {
     
 }
