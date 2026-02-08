@@ -351,25 +351,26 @@ namespace Seb.Fluid.Simulation
 
 		void RunSimulationStep()
 		{
-			ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// predicatePos
+			Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// predicatePos
 			spatialHash.Run(); 
-			ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: reorderKernel);	
-			ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: reorderCopybackKernel);	
+			Dispatch(compute, positionBuffer.count, kernelIndex: reorderKernel);	
+			Dispatch(compute, positionBuffer.count, kernelIndex: reorderCopybackKernel);	
 			
 			for (int k = 0; k < 3 /*|| err > 0.001*/ ; k++) 
 			{ 
-				ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// LagrangeOperatorKernel
-				ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// DeltaPosKernel
-				ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// collision detection (?in DeltaPosKernel)
-				ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// ApplyUpdateKernel
+				Dispatch(compute, positionBuffer.count, kernelIndex: densityKernel);
+				Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// LagrangeOperatorKernel
+				Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// DeltaPosKernel
+				Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// collision detection (?in DeltaPosKernel)
+				Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// ApplyUpdateKernel
 			}
 			
-			ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: 999);			// updateVelocityKernel
+			Dispatch(compute, positionBuffer.count, kernelIndex: 999);			// updateVelocityKernel
 			
 			/* (option) XSPH: Viscosity and Vorticity) */
-			ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: viscosityKernel);	
-			ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: 999);			// VorticityKernel
-			ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: updatePositionsKernel);	
+			Dispatch(compute, positionBuffer.count, kernelIndex: viscosityKernel);	
+			Dispatch(compute, positionBuffer.count, kernelIndex: 999);			// VorticityKernel
+			Dispatch(compute, positionBuffer.count, kernelIndex: updatePositionsKernel);	
 
 		}
 

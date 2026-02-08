@@ -14,6 +14,7 @@ float LinearKernel(float dst, float radius)
     return 0;
 }
 
+// Poly6
 float SmoothingKernelPoly6(float dst, float radius)
 {
 	if (dst < radius)
@@ -25,6 +26,7 @@ float SmoothingKernelPoly6(float dst, float radius)
 	return 0;
 }
 
+// Spiky origin
 float SpikyKernelPow3(float dst, float radius)
 {
 	if (dst < radius)

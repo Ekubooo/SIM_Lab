@@ -607,14 +607,94 @@ void WhiteParticlePrepareNextFrame(uint3 id : SV_DispatchThreadID)
 
 
 [numthreads(ThreadGroupSize, 1, 1)]
-void ApplyAndPredict()
+void ApplyAndPredict(uint3 id : SV_DispatchThreadID)
 {
-    
+    Velocities[id.x] += deltaTime * float3(0, gravity, 0);  // external force
+    PredictedPositions[id.x] = Positions[id.x] + deltaTime * Velocities[id.x];
 }
 
 [numthreads(ThreadGroupSize, 1, 1)]
-void LagrangeOperator()
+void LagrangeOperator(uint3 id : SV_DispatchThreadID)
 {
+    if (id.x >= numParticles)
+        return;
+
+    // Calculate pressure
+    float density = Densities[id.x][0];
+    float densityNear = Densities[id.x][1];     // need?
+    float3 velocity = Velocities[id.x];
+    float3 pos = PredictedPositions[id.x];
+    int3 originCell = GetCell3D(pos, smoothingRadius);
+    float sqrRadius = smoothingRadius * smoothingRadius;
+    int neighbourCount = 0;
+
+    // Foam variables
+    // float weightedVelocityDifference = 0;
+
+
+    // Neighbour search
+    for (int i = 0; i < 27; i++)
+    {
+        uint hash = HashCell3D(originCell + offsets3D[i]);
+        uint key = KeyFromHash(hash, numParticles);
+        uint currIndex = SpatialOffsets[key];       // start index?
+
+        while (currIndex < numParticles)
+        {
+            uint neighbourIndex = currIndex;
+            currIndex++;
+
+            // looking at self?                    // todo? sum lambda_i here?
+            if (neighbourIndex == id.x) continue;
+
+            uint neighbourKey = SpatialKeys[neighbourIndex];
+            // Exit if no longer looking at correct bin
+            if (neighbourKey != key) break;
+
+            float3 neighbourPos = PredictedPositions[neighbourIndex];
+            float3 offsetToNeighbour = neighbourPos - pos;
+            float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
+
+            // Skip if not within radius
+            if (sqrDstToNeighbour > sqrRadius) continue;
+
+            // Calculate pressure force
+            float densityNeighbour = Densities[neighbourIndex][0];
+            float nearDensityNeighbour = Densities[neighbourIndex][1];
+            float neighbourPressure = PressureFromDensity(densityNeighbour);
+            float neighbourPressureNear = NearPressureFromDensity(nearDensityNeighbour);
+
+            // float sharedPressure = (pressure + neighbourPressure) / 2;
+            // float sharedNearPressure = (nearPressure + neighbourPressureNear) / 2;
+
+            float dstToNeighbour = sqrt(sqrDstToNeighbour);
+            float3 dirToNeighbour = dstToNeighbour > 0 ? offsetToNeighbour / dstToNeighbour : float3(0, 1, 0);
+            neighbourCount++;
+
+            // Update pressure force
+            // pressureForce += dirToNeighbour * DensityDerivative(dstToNeighbour, smoothingRadius) * sharedPressure / densityNeighbour;
+            // pressureForce += dirToNeighbour * NearDensityDerivative(dstToNeighbour, smoothingRadius) * sharedNearPressure / nearDensityNeighbour;
+
+            // after neighbor search / in radius, do:
+            // float GradC = DerivativeSpikyPow3(dst, r);
+            // LO[id.x] += Densities[id.x]/rho0;
+            // LO[neighbourIndex] = 
+
+            // ---- White Particle 'Trapped Air' Calculation ----
+            float3 relativeVelocity = velocity - Velocities[neighbourIndex];
+            float relativeVelocityMagnitude = length(relativeVelocity);
+            float3 relativeVelocityDir = relativeVelocity / max(0.000001, relativeVelocityMagnitude);
+            // 0 if moving in opposite directions; up to 2 if moving directly toward one another
+            float convergeWeight = 1 - dot(relativeVelocityDir, -dirToNeighbour);
+            // 1 when distance between particles is 0, down to 0 when distance reaches the smoothing radius
+            float influence = 1 - min(1, dstToNeighbour / smoothingRadius);
+            // Sum up weighted velocity diff between current particle and each of its surrounding neighbours
+            // weightedVelocityDifference += relativeVelocityMagnitude * convergeWeight * influence;
+        }
+    }
+
+    
+    
     
 }
 
