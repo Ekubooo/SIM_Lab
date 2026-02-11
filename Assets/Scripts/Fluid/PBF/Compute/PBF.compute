@@ -4,7 +4,8 @@
 #pragma kernel ReorderCopyBack;
 #pragma kernel CalculateViscosity
 
-#pragma kernel LagrangeOperator
+#pragma kernel CalcLagrangeOperator
+#pragma kernel CalcDeltaPosition
 // todo here ... 
 
 #pragma kernel UpdateDensityTexture
@@ -614,24 +615,23 @@ void ApplyAndPredict(uint3 id : SV_DispatchThreadID)
 }
 
 [numthreads(ThreadGroupSize, 1, 1)]
-void LagrangeOperator(uint3 id : SV_DispatchThreadID)
+void CalcLagrangeOperator(uint3 id : SV_DispatchThreadID)
 {
-    if (id.x >= numParticles)
-        return;
+    if (id.x >= numParticles) return;
 
-    // Calculate pressure
-    float density = Densities[id.x][0];
-    float densityNear = Densities[id.x][1];     // need?
-    float3 velocity = Velocities[id.x];
-    float3 pos = PredictedPositions[id.x];
-    int3 originCell = GetCell3D(pos, smoothingRadius);
+    float3 currPos = PredictedPositions[id.x];
+    float3 velocity = Velocities[id.x];             // need?
+    float density = 0;
+    
+    // float density = Densities[id.x][0];          // need?
+    // float densityNear = Densities[id.x][1];      // need?
+    
+    int3 originCell = GetCell3D(currPos, smoothingRadius);
     float sqrRadius = smoothingRadius * smoothingRadius;
-    int neighbourCount = 0;
 
-    // Foam variables
-    // float weightedVelocityDifference = 0;
-
-
+    float3 grad_i = float3(0.0f, 0.0f, 0.0f);
+    float grad_j = 0;
+    
     // Neighbour search
     for (int i = 0; i < 27; i++)
     {
@@ -642,64 +642,35 @@ void LagrangeOperator(uint3 id : SV_DispatchThreadID)
         while (currIndex < numParticles)
         {
             uint neighbourIndex = currIndex;
-            currIndex++;
+            currIndex += 1;
 
-            // looking at self?                    // todo? sum lambda_i here?
+            // looking at self? sum lambda_i here?      // need?
             if (neighbourIndex == id.x) continue;
 
             uint neighbourKey = SpatialKeys[neighbourIndex];
-            // Exit if no longer looking at correct bin
             if (neighbourKey != key) break;
 
             float3 neighbourPos = PredictedPositions[neighbourIndex];
-            float3 offsetToNeighbour = neighbourPos - pos;
-            float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
-
-            // Skip if not within radius
-            if (sqrDstToNeighbour > sqrRadius) continue;
-
-            // Calculate pressure force
-            float densityNeighbour = Densities[neighbourIndex][0];
-            float nearDensityNeighbour = Densities[neighbourIndex][1];
-            float neighbourPressure = PressureFromDensity(densityNeighbour);
-            float neighbourPressureNear = NearPressureFromDensity(nearDensityNeighbour);
-
-            // float sharedPressure = (pressure + neighbourPressure) / 2;
-            // float sharedNearPressure = (nearPressure + neighbourPressureNear) / 2;
-
-            float dstToNeighbour = sqrt(sqrDstToNeighbour);
-            float3 dirToNeighbour = dstToNeighbour > 0 ? offsetToNeighbour / dstToNeighbour : float3(0, 1, 0);
-            neighbourCount++;
-
-            // Update pressure force
-            // pressureForce += dirToNeighbour * DensityDerivative(dstToNeighbour, smoothingRadius) * sharedPressure / densityNeighbour;
-            // pressureForce += dirToNeighbour * NearDensityDerivative(dstToNeighbour, smoothingRadius) * sharedNearPressure / nearDensityNeighbour;
-
-            // after neighbor search / in radius, do:
-            // float GradC = DerivativeSpikyPow3(dst, r);
-            // LO[id.x] += Densities[id.x]/rho0;
-            // LO[neighbourIndex] = 
-
-            // ---- White Particle 'Trapped Air' Calculation ----
-            float3 relativeVelocity = velocity - Velocities[neighbourIndex];
-            float relativeVelocityMagnitude = length(relativeVelocity);
-            float3 relativeVelocityDir = relativeVelocity / max(0.000001, relativeVelocityMagnitude);
-            // 0 if moving in opposite directions; up to 2 if moving directly toward one another
-            float convergeWeight = 1 - dot(relativeVelocityDir, -dirToNeighbour);
-            // 1 when distance between particles is 0, down to 0 when distance reaches the smoothing radius
-            float influence = 1 - min(1, dstToNeighbour / smoothingRadius);
-            // Sum up weighted velocity diff between current particle and each of its surrounding neighbours
-            // weightedVelocityDifference += relativeVelocityMagnitude * convergeWeight * influence;
+            float3 dir2Neighbour = neighbourPos - currPos;
+            float sqrDstToNeighbour = dot(dir2Neighbour, dir2Neighbour);
+            float dstToNeighbour = length(dir2Neighbour);
+            
+            if (sqrDstToNeighbour > sqrRadius /*|| sqrDstToNeighbour == 0*/) continue;      // if, set 0
+            density += WPoly6(dir2Neighbour, smoothingRadius);
+            float currGrad = WSpikyGrad(dir2Neighbour, smoothingRadius);
+            // currGrad *= inv_rho_0;           // rember to set this.
+            if (neighbourIndex != id.x)
+            {
+                grad_j += dot(currGrad, currGrad);
+            }
+            
         }
     }
-
-    
-    
     
 }
 
 [numthreads(ThreadGroupSize, 1, 1)]
-void deltaPos()
+void CalcDeltaPosition()
 {
     
 }

@@ -1,9 +1,13 @@
-static const float PI = 3.1415926;
+static const float PI = 3.1415926535;
 
 const float K_SpikyPow2;
 const float K_SpikyPow3;
 const float K_SpikyPow2Grad;
 const float K_SpikyPow3Grad;
+const float g_Poly6Coff = 315/(PI * 64);
+const float g_SpikyCoff = 15/PI;
+const float g_SpikyGradCoff = 45/PI;
+
 
 float LinearKernel(float dst, float radius)
 {
@@ -89,3 +93,41 @@ float NearDensityDerivative(float dst, float radius)
 	return DerivativeSpikyPow3(dst, radius);
 }
 
+//W_poly6(r,h) =  315/(64*PI*h^3) * (1-r^2/h^2)^3
+float WPoly6(float3 r, float h)
+{
+	float radius = length(r);
+	float res = 0.0f;
+	if (radius <= h && radius >= 0)
+	{
+		float item = 1 - pow(radius / h, 2);
+		res = g_Poly6Coff / pow(h, 3)  * pow(item, 3);		// ?
+	}
+	return res;
+}
+
+//W_Spiky(r,h) = 15/(PI*h^3) * (1-r/h)^6
+float WSpiky(float3 r, float h)
+{
+	float radius = length(r);
+	float res = 0.0f;
+	if (radius <= h && radius >= 0)
+	{
+		float item = 1 - (radius / h);
+		res = g_SpikyCoff * pow(item, 6);
+	}
+	return res;
+}
+
+//W_Spiky_Grad(r,h)= -45/(PI*h^4) * (1-r/h)^2*(r/|r|);
+float3 WSpikyGrad(float3 r, float h)
+{
+	float radius = length(r);
+	float3 res = float3(0.0f, 0.0f, 0.0f);
+	if (radius < h && radius > 0)
+	{
+		float item = 1 - (radius / h);
+		res = g_SpikyGradCoff * pow(item, 2) * normalize(r);
+	}
+	return res;
+}
