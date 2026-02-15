@@ -4,9 +4,9 @@ const float K_SpikyPow2;
 const float K_SpikyPow3;
 const float K_SpikyPow2Grad;
 const float K_SpikyPow3Grad;
-const float g_Poly6Coff = 315/(PI * 64);
-const float g_SpikyCoff = 15/PI;
-const float g_SpikyGradCoff = 45/PI;
+const float g_Poly6Coff = 315/(PI * 64);	// can pass_in, not set it here
+const float g_SpikyCoff = 15/PI;			// can pass_in, not set it here
+const float g_SpikyGradCoff = 45/PI;		// can pass_in, not set it here
 
 
 float LinearKernel(float dst, float radius)

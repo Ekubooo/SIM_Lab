@@ -31,6 +31,7 @@
             UpdateSetting();            
             ApplyAndPredict.Kernel;
             spatialHash.Run();
+            // Ligo set collision process here (?)
             While: (i++ < solverIterations) or (err > limit)
                 LagrangeOperator.Kernel;        
                 DeltaPos.Kernel;                // Δpi
