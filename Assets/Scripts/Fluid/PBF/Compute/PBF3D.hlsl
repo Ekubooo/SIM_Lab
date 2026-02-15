@@ -72,26 +72,31 @@ float DerivativeSpikyPow2(float dst, float radius)
 	return 0;
 }
 
-float DensityKernel(float dst, float radius)
+// PCG (permuted congruential generator). Thanks to:
+// www.pcg-random.org and www.shadertoy.com/view/XlGcRh
+uint NextRandom(inout uint state)
 {
-	//return SmoothingKernelPoly6(dst, radius);
-	return SpikyKernelPow2(dst, radius);
+	state = state * 747796405 + 2891336453;
+	uint result = ((state >> ((state >> 28) + 4)) ^ state) * 277803737;
+	result = (result >> 22) ^ result;
+	return result;
 }
 
-float NearDensityKernel(float dst, float radius)
+float RandomValue(inout uint state)
 {
-	return SpikyKernelPow3(dst, radius);
+	return NextRandom(state) / 4294967295.0; // 2^32 - 1
 }
 
-float DensityDerivative(float dst, float radius)
+// Thanks to https://math.stackexchange.com/a/4112622
+// Calculates arbitrary normalized vector that is perpendicular to the given direction
+float3 CalculateOrthonormal(float3 dir)
 {
-	return DerivativeSpikyPow2(dst, radius);
+	float a = sign((sign(dir.x) + 0.5) * (sign(dir.z) + 0.5));
+	float b = sign((sign(dir.y) + 0.5) * (sign(dir.z) + 0.5));
+	float3 orthoVec = float3(a * dir.z, b * dir.z, -a * dir.x - b * dir.y);
+	return normalize(orthoVec);
 }
 
-float NearDensityDerivative(float dst, float radius)
-{
-	return DerivativeSpikyPow3(dst, radius);
-}
 
 //W_poly6(r,h) =  315/(64*PI*h^3) * (1-r^2/h^2)^3
 float WPoly6(float3 r, float h)

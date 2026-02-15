@@ -91,6 +91,12 @@ namespace Seb.Fluid.Simulation
 		const int foamUpdateKernel = 9;
 		const int foamReorderCopyBackKernel = 10;
 
+		int calcLagrangeOperatorKernel;		// not init yet
+		int calcDeltaPositionKernel;		// not init yet
+		int updatePredictPositionKernel;	// not init yet
+		int updatePropertyKernel;			// not init yet
+		int vorticityAndViscosityKernel;	// not init yet
+
 		SpatialHash spatialHash;
 
 		// State
@@ -358,20 +364,14 @@ namespace Seb.Fluid.Simulation
 			
 			for (int k = 0; k < 3 /*|| err > 0.001*/ ; k++) 
 			{ 
-				Dispatch(compute, positionBuffer.count, kernelIndex: densityKernel);
-				Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// LagrangeOperatorKernel
-				Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// DeltaPosKernel
-				Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// collision detection (?in DeltaPosKernel)
-				Dispatch(compute, positionBuffer.count, kernelIndex: 999);		// ApplyUpdateKernel
+				// Dispatch(compute, positionBuffer.count, kernelIndex: densityKernel);		// density now in LOKernel (?check)
+				Dispatch(compute, positionBuffer.count, kernelIndex: calcLagrangeOperatorKernel); 
+				Dispatch(compute, positionBuffer.count, kernelIndex: calcDeltaPositionKernel);	 
+				Dispatch(compute, positionBuffer.count, kernelIndex: updatePredictPositionKernel); 
 			}
-			
-			Dispatch(compute, positionBuffer.count, kernelIndex: 999);			// updateVelocityKernel
-			
-			/* (option) XSPH: Viscosity and Vorticity) */
-			Dispatch(compute, positionBuffer.count, kernelIndex: viscosityKernel);	
-			Dispatch(compute, positionBuffer.count, kernelIndex: 999);			// VorticityKernel
-			Dispatch(compute, positionBuffer.count, kernelIndex: updatePositionsKernel);	
 
+			Dispatch(compute, positionBuffer.count, kernelIndex: updatePropertyKernel);			// Update vel and pos
+			Dispatch(compute, positionBuffer.count, kernelIndex: vorticityAndViscosityKernel);		// vorticity not impl.
 		}
 
 		void UpdateSmoothingConstants()
