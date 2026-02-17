@@ -8,7 +8,7 @@ using static Seb.Helpers.ComputeHelper;
 
 namespace Seb.Fluid.Simulation
 {
-	public class FluidSim : FluidBase
+	public class FluidSim : FluidBase, InputData
 	{
 		public event Action<FluidSim> SimulationInitCompleted;
 
@@ -104,6 +104,13 @@ namespace Seb.Fluid.Simulation
 		
 		internal float RotateSpeed = 0f;
 		InputHelper inputHelper;
+		
+		float InputData.gravity { get => gravity; set => gravity = value; }
+		float InputData.RotateSpeed { get => RotateSpeed; set => RotateSpeed = value; }
+		bool InputData.isPaused { get => isPaused; set => isPaused = value; }
+		bool InputData.inSlowMode { get => inSlowMode; set => inSlowMode = value; }
+		bool InputData.pauseNextFrame { get => pauseNextFrame; set => pauseNextFrame = value; }
+		Transform InputData.transform { get => this.transform; }
 
 		void Start()
 		{
