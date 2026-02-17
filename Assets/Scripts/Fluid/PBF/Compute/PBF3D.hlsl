@@ -4,9 +4,9 @@ const float K_SpikyPow2;
 const float K_SpikyPow3;
 const float K_SpikyPow2Grad;
 const float K_SpikyPow3Grad;
-const float g_Poly6Coff = 315/(PI * 64);	// can pass_in, not set it here
-const float g_SpikyCoff = 15/PI;			// can pass_in, not set it here
-const float g_SpikyGradCoff = 45/PI;		// can pass_in, not set it here
+const float g_Poly6Coff; 					
+const float g_SpikyCoff;			
+const float g_SpikyGradCoff;	
 
 
 float LinearKernel(float dst, float radius)
@@ -97,42 +97,44 @@ float3 CalculateOrthonormal(float3 dir)
 	return normalize(orthoVec);
 }
 
-
+// kernel with radius check.
 //W_poly6(r,h) =  315/(64*PI*h^3) * (1-r^2/h^2)^3
 float WPoly6(float3 r, float h)
 {
 	float radius = length(r);
-	float res = 0.0f;
+	float result = 0.0f;
 	if (radius <= h && radius >= 0)
 	{
-		float item = 1 - pow(radius / h, 2);
-		res = g_Poly6Coff / pow(h, 3)  * pow(item, 3);		// ?
+		// float item = 1 - pow(radius / h, 2);
+		float item = h * h - r * r; 
+		result = g_Poly6Coff * pow(item, 3);	
 	}
-	return res;
+	return result;
 }
 
 //W_Spiky(r,h) = 15/(PI*h^3) * (1-r/h)^6
 float WSpiky(float3 r, float h)
 {
 	float radius = length(r);
-	float res = 0.0f;
+	float result = 0.0f;
 	if (radius <= h && radius >= 0)
 	{
-		float item = 1 - (radius / h);
-		res = g_SpikyCoff * pow(item, 6);
+		// float item = 1 - (radius / h);
+		float item = h - r;
+		result = g_SpikyCoff * pow(item, 3);
 	}
-	return res;
+	return result;
 }
 
 //W_Spiky_Grad(r,h)= -45/(PI*h^4) * (1-r/h)^2*(r/|r|);
 float3 WSpikyGrad(float3 r, float h)
 {
 	float radius = length(r);
-	float3 res = float3(0.0f, 0.0f, 0.0f);
+	float3 result = float3(0.0f, 0.0f, 0.0f);
 	if (radius < h && radius > 0)
 	{
-		float item = 1 - (radius / h);
-		res = g_SpikyGradCoff * pow(item, 2) * normalize(r);
+		float item = h - r;
+		result = g_SpikyGradCoff * pow(item, 2) * normalize(r);
 	}
-	return res;
+	return result;
 }

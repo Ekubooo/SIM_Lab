@@ -8,16 +8,18 @@ using static Seb.Helpers.ComputeHelper;
 
 namespace Seb.Fluid.Simulation
 {
-	public class SPH : FluidBase
+	public class SPH : FluidBase, InputData
 	{
 		public event Action<SPH> SimulationInitCompleted;
 
-		[Header("Time Step")] public float normalTimeScale = 1;
+		[Header("Time Step")] 
+		public float normalTimeScale = 1;
 		public float slowTimeScale = 0.1f;
 		public float maxTimestepFPS = 60; // if time-step dips lower than this fps, simulation will run slower (set to 0 to disable)
 		public int iterationsPerFrame = 3;
 
-		[Header("Simulation Settings")] public float gravity = -10;
+		[Header("Simulation Settings")] 
+		public float gravity = -10;
 		public float smoothingRadius = 0.2f;
 		public float targetDensity = 630;
 		public float pressureMultiplier = 288;
@@ -25,7 +27,8 @@ namespace Seb.Fluid.Simulation
 		public float viscosityStrength = 0;
 		[Range(0, 1)] public float collisionDamping = 0.95f;
 
-		[Header("Foam Settings")] public bool foamActive;
+		[Header("Foam Settings")] 
+		public bool foamActive;
 		public int maxFoamParticleCount = 1000;
 		public float trappedAirSpawnRate = 70;
 		public float spawnRateFadeInTime = 0.5f;
@@ -38,11 +41,14 @@ namespace Seb.Fluid.Simulation
 		public float bubbleScale = 0.5f;
 		public float bubbleChangeScaleSpeed = 7;
 
-		[Header("Volumetric Render Settings")] public bool renderToTex3D;
+		[Header("Volumetric Render Settings")] 
+		public bool renderToTex3D;
 		public int densityTextureRes;
 
-		[Header("References")] public ComputeShader compute;
-		public SpawnerSPH spawner;
+		[Header("References")] 
+		public ComputeShader compute;
+		// public SpawnerSPH spawner;
+		public Spawner3D spawner;
 
 		[HideInInspector] public RenderTexture DensityMap;
 		public Vector3 Scale => transform.localScale;
@@ -100,11 +106,20 @@ namespace Seb.Fluid.Simulation
 		float smoothRadiusOld;
 		float simTimer;		
 		internal bool inSlowMode;
-		SpawnerSPH.SpawnData spawnData;
+		// SpawnerSPH.SpawnData spawnData;
+		Spawner3D.SpawnData spawnData;
 		Dictionary<ComputeBuffer, string> bufferNameLookup;
 
 		internal float RotateSpeed = 0f;
 		InputHelper inputHelper;
+
+		float InputData.gravity { get => gravity; set => gravity = value; }
+		float InputData.RotateSpeed { get => RotateSpeed; set => RotateSpeed = value; }
+		bool InputData.isPaused { get => isPaused; set => isPaused = value; }
+		bool InputData.inSlowMode { get => inSlowMode; set => inSlowMode = value; }
+		bool InputData.pauseNextFrame { get => pauseNextFrame; set => pauseNextFrame = value; }
+		Transform InputData.transform { get => this.transform; }
+		
 
 		void Start()
 		{
@@ -416,7 +431,7 @@ namespace Seb.Fluid.Simulation
 			compute.SetFloat("bubbleScale", bubbleScale);
 		}
 
-		void SetInitialBufferData(SpawnerSPH.SpawnData spawnData)
+		void SetInitialBufferData(Spawner3D.SpawnData spawnData)
 		{
 			positionBuffer.SetData(spawnData.points);
 			predictedPositionsBuffer.SetData(spawnData.points);

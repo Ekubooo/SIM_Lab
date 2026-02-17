@@ -8,7 +8,7 @@ using static Seb.Helpers.ComputeHelper;
 
 namespace Seb.Fluid.Simulation
 {
-	public class PBF : FluidBase
+	public class PBF : FluidBase, InputData
 	{
 		public event Action<PBF> SimulationInitCompleted;
 
@@ -124,6 +124,13 @@ namespace Seb.Fluid.Simulation
 		
 		internal float RotateSpeed = 0f;
 		InputHelper inputHelper;
+		
+		float InputData.gravity { get => gravity; set => gravity = value; }
+		float InputData.RotateSpeed { get => RotateSpeed; set => RotateSpeed = value; }
+		bool InputData.isPaused { get => isPaused; set => isPaused = value; }
+		bool InputData.inSlowMode { get => inSlowMode; set => inSlowMode = value; }
+		bool InputData.pauseNextFrame { get => pauseNextFrame; set => pauseNextFrame = value; }
+		Transform InputData.transform { get => this.transform; }
 
 		void Start()
 		{
@@ -394,15 +401,25 @@ namespace Seb.Fluid.Simulation
 		void UpdateSmoothingConstants()
 		{
 			float r = smoothingRadius;
-			float spikyPow2 = 15 / (2 * Mathf.PI * Mathf.Pow(r, 5));
-			float spikyPow3 = 15 / (Mathf.PI * Mathf.Pow(r, 6));
+			float spikyPow2		= 15 / (2 * Mathf.PI * Mathf.Pow(r, 5));
+			float spikyPow3		= 15 / (Mathf.PI * Mathf.Pow(r, 6));
 			float spikyPow2Grad = 15 / (Mathf.PI * Mathf.Pow(r, 5));
 			float spikyPow3Grad = 45 / (Mathf.PI * Mathf.Pow(r, 6));
+			
+			// float poly6Coff = 315f / (64f * Mathf.PI * Mathf.Pow(r, 3));	// Simplified
+			float poly6Coff		= 315f / (64f * Mathf.PI * Mathf.Pow(r, 9));	
+			float spikyCoff		= 15f/ (Mathf.PI * Mathf.Pow(r, 6));
+			float spikyGradCoff = -45f / (Mathf.PI * Mathf.Pow(r, 6));
 
 			compute.SetFloat("K_SpikyPow2", spikyPow2);
 			compute.SetFloat("K_SpikyPow3", spikyPow3);
 			compute.SetFloat("K_SpikyPow2Grad", spikyPow2Grad);
 			compute.SetFloat("K_SpikyPow3Grad", spikyPow3Grad);
+			
+			compute.SetFloat("g_Poly6Coff", poly6Coff);
+			compute.SetFloat("g_SpikyCoff", spikyCoff);
+			compute.SetFloat("g_SpikyGradCoff", spikyGradCoff);
+
 		}
 
 		void UpdateSettings(float stepDeltaTime, float frameDeltaTime)

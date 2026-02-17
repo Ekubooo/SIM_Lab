@@ -21,9 +21,8 @@
 static const int ThreadGroupSize = 256;
 
 // todo: Refactor the compute shaer file and updateSettings func in main script.
-// todo: Rename the PBF3D.hlsl and pass the contant value in update setting.
-// todo: make sure the radius check of neighbor search is correct.
-// 
+// todo: Rename the PBF3D.hlsl and pass the constant value in update setting.       // finish and check again
+// todo: make sure the radius check of neighbor search is correct.                  // check
 
 [numthreads(ThreadGroupSize, 1, 1)]
 void ExternalForces(uint3 id : SV_DispatchThreadID)

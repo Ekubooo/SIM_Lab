@@ -38,12 +38,12 @@ const float2 interactionInputPoint;
 const float interactionInputStrength;
 const float interactionInputRadius;
 
-const float rho0;           // todo: Pass in
-const float inv_rho0;       // todo: Pass in
-const float lambdaEps;      // todo: Pass in
-const float DeltaQ;         // todo: Pass in
-const float S_corr_K;       // todo: Pass in, K = 0.1 is good 
-const float S_corr_N;       // todo: Pass in, N = 4 is good
+const float rho0;           // check again
+const float inv_rho0;       // check again
+const float lambdaEps;      // check again
+const float DeltaQ;         // check again
+const float S_corr_K;       // check again
+const float S_corr_N;       // check again
 
 // Volume texture settings
 RWTexture3D<float> DensityMap;
