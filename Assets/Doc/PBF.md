@@ -23,56 +23,26 @@
     ```
 
 - PBF
-    - Algorithm
-    ```
-    Start();        // INIT
-    Update()
-        RunSimulationFrame()
-            UpdateSetting();            // For external changing;
-            For: i = 0 to PNum 
-                apply force to vi      
-                predict position xi*
-            END For;
-            spatialHash.Run();
-            For: i = 0 to solverIterations
-                For: i = 0 to PNum 
-                    calculate LagrangeOperator
-                For: i = 0 to PNum              
-                    calculate Δpi               
-                    collision and detection     
-                For: i = 0 to PNum 
-                    update pos xi* = xi* + Δpi
-            END For;
-            For: i = 0 to PNum
-                update velocity;
-                vorticity and viscosity;
-                update position;
-            END For;
-		    SimulationStepCompleted?.Invoke();  
-        END RunSimulationFrame();
-        HandleInput();
-    END Update();
-    ```
 
-    - code
     ```
     Start();        // INIT
     Update()
-        RunSimulationFrame()
-            UpdateSetting();            // For external changing;
+        For i = 0 to subIter        // 1 to 3 or more
+            UpdateSetting();            
             ApplyAndPredict.Kernel;
             spatialHash.Run();
-            For: i = 0 to solverIterations
+            // Ligo set collision process here (?)
+            While: (i++ < solverIterations) or (err > limit)
                 LagrangeOperator.Kernel;        
-                deltaPos.Kernel;                // Δpi
-                CDAR.Kernel;                    // collision detection and response
-                updatePredictPos.Kernel;        // xi* = xi* + Δpi
+                DeltaPos.Kernel;                // Δpi
+                Collision.Kernel;               // collision detection and response
+                UpdatePredictPos.Kernel;        // xi* = xi* + Δpi
             END For;
-            UpdateVelocity.Kernel;      // (?)
-            ApplyVV.Kernel;             // vorticity and viscosity;
-            UpdatePosition.Kernel;      // (?)
-            SimulationStepCompleted?.Invoke();   // (?)
-        END RunSimulationFrame();
+            UpdateVelocity.Kernel;      
+            ApplyVV.Kernel;         // vorticity and viscosity;
+            UpdatePosition.Kernel;      
+            SimulationStepCompleted?.Invoke();   
+        END For;
         HandleInput();
     END Update();
     ```

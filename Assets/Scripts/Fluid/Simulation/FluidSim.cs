@@ -356,7 +356,8 @@ namespace Seb.Fluid.Simulation
 
 			Dispatch(compute, positionBuffer.count, kernelIndex: densityKernel);
 			Dispatch(compute, positionBuffer.count, kernelIndex: pressureKernel);
-			if (viscosityStrength != 0) Dispatch(compute, positionBuffer.count, kernelIndex: viscosityKernel);
+			if (viscosityStrength != 0) 
+				Dispatch(compute, positionBuffer.count, kernelIndex: viscosityKernel);
 			Dispatch(compute, positionBuffer.count, kernelIndex: updatePositionsKernel);
 		}
 

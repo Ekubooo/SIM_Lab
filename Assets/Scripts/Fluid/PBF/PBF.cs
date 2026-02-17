@@ -1,31 +1,35 @@
 using System;
 using UnityEngine;
 using Seb.GPUSorting;
+using Seb.Helpers;
 using Unity.Mathematics;
 using System.Collections.Generic;
-using Seb.Helpers;
 using static Seb.Helpers.ComputeHelper;
 
 namespace Seb.Fluid.Simulation
 {
-	public class PBF : FluidBase
+	public class PBF : FluidBase, InputData
 	{
 		public event Action<PBF> SimulationInitCompleted;
 
-		[Header("Time Step")] public float normalTimeScale = 1;
+		[Header("Time Step")] 
+		public float normalTimeScale = 1;
 		public float slowTimeScale = 0.1f;
 		public float maxTimestepFPS = 60; // if time-step dips lower than this fps, simulation will run slower (set to 0 to disable)
 		public int iterationsPerFrame = 3;
+		public int maxSolverIterations = 3;
 
-		[Header("Simulation Settings")] public float gravity = -10;
+		[Header("Simulation Settings")] 
+		public float gravity = -10;
 		public float smoothingRadius = 0.2f;
 		public float targetDensity = 630;
 		public float pressureMultiplier = 288;
 		public float nearPressureMultiplier = 2.15f;
-		public float viscosityStrength = 0;
+		public float viscosityStrength = 0.005f;				// todo: 0.01 is good 
 		[Range(0, 1)] public float collisionDamping = 0.95f;
 
-		[Header("Foam Settings")] public bool foamActive;
+		[Header("Foam Settings")] 
+		public bool foamActive;
 		public int maxFoamParticleCount = 1000;
 		public float trappedAirSpawnRate = 70;
 		public float spawnRateFadeInTime = 0.5f;
@@ -40,6 +44,13 @@ namespace Seb.Fluid.Simulation
 
 		[Header("Volumetric Render Settings")] public bool renderToTex3D;
 		public int densityTextureRes;
+
+		[Header("PBF params")]
+		public float rho_0 = 1.0f;		// ligo set:
+		public float lambda_Eps = 1000f;
+		public float Delta_Q = 0.06f;	// todo: abs(delta_q) = 0.1h ... 0.3h
+		public float Scorr_K = 0.1f;		 
+		public float Scorr_N = 4f;
 
 		[Header("References")] public ComputeShader compute;
 		public Spawner3D spawner;
@@ -90,6 +101,14 @@ namespace Seb.Fluid.Simulation
 		const int renderKernel = 8;
 		const int foamUpdateKernel = 9;
 		const int foamReorderCopyBackKernel = 10;
+		
+		int applyAndPredictKernel;			// set, but maybe change?
+		int calcLagrangeOperatorKernel;		// set, but maybe change?
+		int calcDeltaPositionKernel;		// set, but maybe change?
+		int updatePredictPositionKernel;	// set, but maybe change?
+		int updatePropertyKernel;			// set, but maybe change?
+		int vorticityAndViscosityKernel;	// set, but maybe change?
+		// foam compute incorrect yet
 
 		SpatialHash spatialHash;
 
@@ -99,11 +118,19 @@ namespace Seb.Fluid.Simulation
 		float smoothRadiusOld;
 		float simTimer;
 		internal bool inSlowMode;
-		Spawner3D.SpawnData spawnData;
+		Spawner3D.SpawnData spawnData;	
+		// SpawnerPBF.SpawnData spawnData;		// issue
 		Dictionary<ComputeBuffer, string> bufferNameLookup;
 		
 		internal float RotateSpeed = 0f;
 		InputHelper inputHelper;
+		
+		float InputData.gravity { get => gravity; set => gravity = value; }
+		float InputData.RotateSpeed { get => RotateSpeed; set => RotateSpeed = value; }
+		bool InputData.isPaused { get => isPaused; set => isPaused = value; }
+		bool InputData.inSlowMode { get => inSlowMode; set => inSlowMode = value; }
+		bool InputData.pauseNextFrame { get => pauseNextFrame; set => pauseNextFrame = value; }
+		Transform InputData.transform { get => this.transform; }
 
 		void Start()
 		{
@@ -122,6 +149,14 @@ namespace Seb.Fluid.Simulation
 
 			spatialHash = new SpatialHash(numParticles);
 			inputHelper = new InputHelper();
+			
+			// kernel id 
+			applyAndPredictKernel			= compute.FindKernel("ApplyAndPredict");
+			calcLagrangeOperatorKernel		= compute.FindKernel("CalcLagrangeOperator");
+			calcDeltaPositionKernel			= compute.FindKernel("CalcDeltaPosition");
+			updatePredictPositionKernel		= compute.FindKernel("UpdatePredictPosition");
+			updatePropertyKernel			= compute.FindKernel("UpdateProperty");
+			vorticityAndViscosityKernel		= compute.FindKernel("VorticityAndViscosity");
 			
 			// Create buffers
 			positionBuffer = CreateStructuredBuffer<float3>(numParticles);
@@ -346,32 +381,45 @@ namespace Seb.Fluid.Simulation
 
 		void RunSimulationStep()
 		{
-			Dispatch(compute, positionBuffer.count, kernelIndex: externalForcesKernel);
-
-			Dispatch(compute, positionBuffer.count, kernelIndex: spatialHashKernel);
-			spatialHash.Run();
+			Dispatch(compute, positionBuffer.count, kernelIndex: applyAndPredictKernel);		
+			spatialHash.Run(); 
+			Dispatch(compute, positionBuffer.count, kernelIndex: reorderKernel);	
+			Dispatch(compute, positionBuffer.count, kernelIndex: reorderCopybackKernel);	
 			
-			Dispatch(compute, positionBuffer.count, kernelIndex: reorderKernel);
-			Dispatch(compute, positionBuffer.count, kernelIndex: reorderCopybackKernel);
+			for (int k = 0; k < maxSolverIterations ; k++) 
+			{ 
+				// Dispatch(compute, positionBuffer.count, kernelIndex: densityKernel);		// density now in LOKernel (?check)
+				Dispatch(compute, positionBuffer.count, kernelIndex: calcLagrangeOperatorKernel); 
+				Dispatch(compute, positionBuffer.count, kernelIndex: calcDeltaPositionKernel);	 
+				Dispatch(compute, positionBuffer.count, kernelIndex: updatePredictPositionKernel); 
+			}
 
-			Dispatch(compute, positionBuffer.count, kernelIndex: densityKernel);
-			Dispatch(compute, positionBuffer.count, kernelIndex: pressureKernel);
-			if (viscosityStrength != 0) Dispatch(compute, positionBuffer.count, kernelIndex: viscosityKernel);
-			Dispatch(compute, positionBuffer.count, kernelIndex: updatePositionsKernel);
+			Dispatch(compute, positionBuffer.count, kernelIndex: updatePropertyKernel);			// Update vel and pos
+			Dispatch(compute, positionBuffer.count, kernelIndex: vorticityAndViscosityKernel);		// vorticity not impl.
 		}
 
 		void UpdateSmoothingConstants()
 		{
 			float r = smoothingRadius;
-			float spikyPow2 = 15 / (2 * Mathf.PI * Mathf.Pow(r, 5));
-			float spikyPow3 = 15 / (Mathf.PI * Mathf.Pow(r, 6));
+			float spikyPow2		= 15 / (2 * Mathf.PI * Mathf.Pow(r, 5));
+			float spikyPow3		= 15 / (Mathf.PI * Mathf.Pow(r, 6));
 			float spikyPow2Grad = 15 / (Mathf.PI * Mathf.Pow(r, 5));
 			float spikyPow3Grad = 45 / (Mathf.PI * Mathf.Pow(r, 6));
+			
+			// float poly6Coff = 315f / (64f * Mathf.PI * Mathf.Pow(r, 3));	// Simplified
+			float poly6Coff		= 315f / (64f * Mathf.PI * Mathf.Pow(r, 9));	
+			float spikyCoff		= 15f/ (Mathf.PI * Mathf.Pow(r, 6));
+			float spikyGradCoff = -45f / (Mathf.PI * Mathf.Pow(r, 6));
 
 			compute.SetFloat("K_SpikyPow2", spikyPow2);
 			compute.SetFloat("K_SpikyPow3", spikyPow3);
 			compute.SetFloat("K_SpikyPow2Grad", spikyPow2Grad);
 			compute.SetFloat("K_SpikyPow3Grad", spikyPow3Grad);
+			
+			compute.SetFloat("g_Poly6Coff", poly6Coff);
+			compute.SetFloat("g_SpikyCoff", spikyCoff);
+			compute.SetFloat("g_SpikyGradCoff", spikyGradCoff);
+
 		}
 
 		void UpdateSettings(float stepDeltaTime, float frameDeltaTime)
@@ -410,6 +458,15 @@ namespace Seb.Fluid.Simulation
 			compute.SetInt("bubbleClassifyMinNeighbours", bubbleClassifyMinNeighbours);
 			compute.SetFloat("bubbleScaleChangeSpeed", bubbleChangeScaleSpeed);
 			compute.SetFloat("bubbleScale", bubbleScale);
+			
+			// PBF params
+			compute.SetFloat("rho0", rho_0);
+			compute.SetFloat("inv_rho0", 1f/rho_0);
+			compute.SetFloat("lambdaEps", lambda_Eps);
+			compute.SetFloat("DeltaQ", Delta_Q);
+			compute.SetFloat("S_corr_K", Scorr_K);
+			compute.SetFloat("S_corr_N", Scorr_N);
+			
 		}
 
 		void SetInitialBufferData(Spawner3D.SpawnData spawnData)
