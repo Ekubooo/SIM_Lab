@@ -46,9 +46,10 @@ namespace Seb.Fluid.Simulation
 		public int densityTextureRes;
 
 		[Header("PBF params")]
-		public float rho_0 = 1.0f;		// ligo set:
+		// public float rho_0 = 1.0f;		// ligo set different
+		public float rho_0;					// equals to target density
 		public float lambda_Eps = 1000f;
-		public float Delta_Q = 0.06f;	// todo: abs(delta_q) = 0.1h ... 0.3h
+		public float Delta_Q = 0.02f;	// todo: abs(delta_q) = 0.1h ... 0.3h
 		public float Scorr_K = 0.1f;		 
 		public float Scorr_N = 4f;
 
@@ -63,13 +64,17 @@ namespace Seb.Fluid.Simulation
 		public ComputeBuffer foamSortTargetBuffer { get; private set; }
 		public ComputeBuffer foamCountBuffer { get; private set; }
 		public ComputeBuffer positionBuffer { get; private set; }
+		public ComputeBuffer predictedPositionsBuffer { get; private set; }
 		public ComputeBuffer velocityBuffer { get; private set; }
 		public ComputeBuffer densityBuffer { get; private set; }
-		public ComputeBuffer predictedPositionsBuffer;
+		
+		public ComputeBuffer DeltaPositionBuffer { get; private set; }
+		
+		public ComputeBuffer LagrangeOperatorBuffer { get; private set; }
 		
 		public ComputeBuffer debugBuffer { get; private set; }
 		
-		// new
+		// Rendering setting.
 		public override ComputeBuffer PositionBuffer => positionBuffer;
 		public override ComputeBuffer VelocityBuffer => velocityBuffer;
 		public override ComputeBuffer DebugBuffer => debugBuffer;
@@ -90,25 +95,32 @@ namespace Seb.Fluid.Simulation
 		ComputeBuffer sortTarget_predictedPositionsBuffer;
 
 		// Kernel IDs
-		const int externalForcesKernel = 0;
-		const int spatialHashKernel = 1;
-		const int reorderKernel = 2;
-		const int reorderCopybackKernel = 3;
-		const int densityKernel = 4;
-		const int pressureKernel = 5;
-		const int viscosityKernel = 6;
-		const int updatePositionsKernel = 7;
-		const int renderKernel = 8;
-		const int foamUpdateKernel = 9;
-		const int foamReorderCopyBackKernel = 10;
+		// const int externalForcesKernel = 0;
+		// const int spatialHashKernel = 1;
+		// const int reorderKernel = 2;
+		// const int reorderCopybackKernel = 3;
+		// const int densityKernel = 4;
+		// const int pressureKernel = 5;
+		// const int viscosityKernel = 6;
+		// const int updatePositionsKernel = 7;
+		// const int renderKernel = 8;					// needed				
+		// const int foamUpdateKernel = 9;				// needed	
+		// const int foamReorderCopyBackKernel = 10;	// needed	
+
+		int spatialHashKernel;
+		int reorderKernel;
+		int reorderCopybackKernel;
 		
-		int applyAndPredictKernel;			// set, but maybe change?
-		int calcLagrangeOperatorKernel;		// set, but maybe change?
-		int calcDeltaPositionKernel;		// set, but maybe change?
-		int updatePredictPositionKernel;	// set, but maybe change?
-		int updatePropertyKernel;			// set, but maybe change?
-		int vorticityAndViscosityKernel;	// set, but maybe change?
-		// foam compute incorrect yet
+		int applyAndPredictKernel;			
+		int calcLagrangeOperatorKernel;		
+		int calcDeltaPositionKernel;		
+		int updatePredictPositionKernel;	
+		int updatePropertyKernel;			
+		int vorticityAndViscosityKernel;	
+		
+		int renderKernel;				
+		int foamUpdateKernel;			
+		int foamReorderCopyBackKernel;
 
 		SpatialHash spatialHash;
 
@@ -119,7 +131,6 @@ namespace Seb.Fluid.Simulation
 		float simTimer;
 		internal bool inSlowMode;
 		Spawner3D.SpawnData spawnData;	
-		// SpawnerPBF.SpawnData spawnData;		// issue
 		Dictionary<ComputeBuffer, string> bufferNameLookup;
 		
 		internal float RotateSpeed = 0f;
@@ -151,6 +162,10 @@ namespace Seb.Fluid.Simulation
 			inputHelper = new InputHelper();
 			
 			// kernel id 
+			spatialHashKernel				= compute.FindKernel("UpdateSpatialHash");
+			reorderKernel					= compute.FindKernel("Reorder");
+			reorderCopybackKernel			= compute.FindKernel("ReorderCopyBack");
+			
 			applyAndPredictKernel			= compute.FindKernel("ApplyAndPredict");
 			calcLagrangeOperatorKernel		= compute.FindKernel("CalcLagrangeOperator");
 			calcDeltaPositionKernel			= compute.FindKernel("CalcDeltaPosition");
@@ -158,11 +173,19 @@ namespace Seb.Fluid.Simulation
 			updatePropertyKernel			= compute.FindKernel("UpdateProperty");
 			vorticityAndViscosityKernel		= compute.FindKernel("VorticityAndViscosity");
 			
+			renderKernel					= compute.FindKernel("UpdateDensityTexture");				// todo: incorrect
+			foamUpdateKernel				= compute.FindKernel("UpdateWhiteParticles");				// todo: incorrect
+			foamReorderCopyBackKernel		= compute.FindKernel("WhiteParticlePrepareNextFrame");		// todo: incorrect
+			
 			// Create buffers
 			positionBuffer = CreateStructuredBuffer<float3>(numParticles);
 			predictedPositionsBuffer = CreateStructuredBuffer<float3>(numParticles);
 			velocityBuffer = CreateStructuredBuffer<float3>(numParticles);
-			densityBuffer = CreateStructuredBuffer<float2>(numParticles);
+			DeltaPositionBuffer = CreateStructuredBuffer<float3>(numParticles);
+			
+			densityBuffer = CreateStructuredBuffer<float>(numParticles);
+			LagrangeOperatorBuffer = CreateStructuredBuffer<float>(numParticles);
+			
 			foamBuffer = CreateStructuredBuffer<FoamParticle>(maxFoamParticleCount);
 			foamSortTargetBuffer = CreateStructuredBuffer<FoamParticle>(maxFoamParticleCount);
 			foamCountBuffer = CreateStructuredBuffer<uint>(4096);
@@ -178,12 +201,16 @@ namespace Seb.Fluid.Simulation
 				{ predictedPositionsBuffer, "PredictedPositions" },
 				{ velocityBuffer, "Velocities" },
 				{ densityBuffer, "Densities" },
+				{ DeltaPositionBuffer, "DeltaPos" },
+				{ LagrangeOperatorBuffer, "LOperator" },
+				
 				{ spatialHash.SpatialKeys, "SpatialKeys" },
 				{ spatialHash.SpatialOffsets, "SpatialOffsets" },
 				{ spatialHash.SpatialIndices, "SortedIndices" },
 				{ sortTarget_positionBuffer, "SortTarget_Positions" },
 				{ sortTarget_predictedPositionsBuffer, "SortTarget_PredictedPositions" },
 				{ sortTarget_velocityBuffer, "SortTarget_Velocities" },
+				
 				{ foamCountBuffer, "WhiteParticleCounters" },
 				{ foamBuffer, "WhiteParticles" },
 				{ foamSortTargetBuffer, "WhiteParticlesCompacted" },
@@ -192,14 +219,6 @@ namespace Seb.Fluid.Simulation
 
 			// Set buffer data
 			SetInitialBufferData(spawnData);
-
-			// External forces kernel
-			SetBuffers(compute, externalForcesKernel, bufferNameLookup, new ComputeBuffer[]
-			{
-				positionBuffer,
-				predictedPositionsBuffer,
-				velocityBuffer
-			});
 
 			// Spatial hash kernel
 			SetBuffers(compute, spatialHashKernel, bufferNameLookup, new ComputeBuffer[]
@@ -233,44 +252,57 @@ namespace Seb.Fluid.Simulation
 				sortTarget_velocityBuffer,
 				spatialHash.SpatialIndices
 			});
-
-			// Density kernel
-			SetBuffers(compute, densityKernel, bufferNameLookup, new ComputeBuffer[]
-			{
-				predictedPositionsBuffer,
-				densityBuffer,
-				spatialHash.SpatialKeys,
-				spatialHash.SpatialOffsets
-			});
-
-			// Pressure kernel
-			SetBuffers(compute, pressureKernel, bufferNameLookup, new ComputeBuffer[]
-			{
-				predictedPositionsBuffer,
-				densityBuffer,
-				velocityBuffer,
-				spatialHash.SpatialKeys,
-				spatialHash.SpatialOffsets,
-				foamBuffer,
-				foamCountBuffer,
-				debugBuffer
-			});
-
-			// Viscosity kernel
-			SetBuffers(compute, viscosityKernel, bufferNameLookup, new ComputeBuffer[]
-			{
-				predictedPositionsBuffer,
-				densityBuffer,
-				velocityBuffer,
-				spatialHash.SpatialKeys,
-				spatialHash.SpatialOffsets
-			});
-
-			// Update positions kernel
-			SetBuffers(compute, updatePositionsKernel, bufferNameLookup, new ComputeBuffer[]
+			
+			// Apply And Predict kernel
+			SetBuffers(compute, applyAndPredictKernel, bufferNameLookup, new ComputeBuffer[]
 			{
 				positionBuffer,
+				predictedPositionsBuffer,
 				velocityBuffer
+			});
+			
+			// Lagrange Operator kernel
+			SetBuffers(compute, calcLagrangeOperatorKernel, bufferNameLookup, new ComputeBuffer[]
+			{
+				predictedPositionsBuffer,
+				spatialHash.SpatialKeys,
+				spatialHash.SpatialOffsets,
+				densityBuffer,
+				LagrangeOperatorBuffer
+			});
+			
+			// delta position kernel
+			SetBuffers(compute, calcDeltaPositionKernel, bufferNameLookup, new ComputeBuffer[]
+			{
+				predictedPositionsBuffer,
+				spatialHash.SpatialKeys,
+				spatialHash.SpatialOffsets,
+				LagrangeOperatorBuffer,
+				DeltaPositionBuffer
+			});
+			
+			// update predict position kerenl
+			SetBuffers(compute, updatePredictPositionKernel, bufferNameLookup, new ComputeBuffer[]
+			{
+				predictedPositionsBuffer,
+				DeltaPositionBuffer
+			});
+			
+			// Update Property kernel
+			SetBuffers(compute, updatePropertyKernel, bufferNameLookup, new ComputeBuffer[]
+			{
+				positionBuffer,
+				predictedPositionsBuffer,
+				velocityBuffer
+			});
+			
+			// Vorticity And Viscosity kernel
+			SetBuffers(compute, vorticityAndViscosityKernel, bufferNameLookup, new ComputeBuffer[]
+			{
+				predictedPositionsBuffer,
+				velocityBuffer,
+				spatialHash.SpatialKeys,
+				spatialHash.SpatialOffsets
 			});
 
 			// Render to 3d tex kernel
@@ -381,7 +413,8 @@ namespace Seb.Fluid.Simulation
 
 		void RunSimulationStep()
 		{
-			Dispatch(compute, positionBuffer.count, kernelIndex: applyAndPredictKernel);		
+			Dispatch(compute, positionBuffer.count, kernelIndex: applyAndPredictKernel);	
+			Dispatch(compute, positionBuffer.count, kernelIndex: spatialHashKernel);
 			spatialHash.Run(); 
 			Dispatch(compute, positionBuffer.count, kernelIndex: reorderKernel);	
 			Dispatch(compute, positionBuffer.count, kernelIndex: reorderCopybackKernel);	
@@ -394,7 +427,7 @@ namespace Seb.Fluid.Simulation
 				Dispatch(compute, positionBuffer.count, kernelIndex: updatePredictPositionKernel); 
 			}
 
-			Dispatch(compute, positionBuffer.count, kernelIndex: updatePropertyKernel);			// Update vel and pos
+			Dispatch(compute, positionBuffer.count, kernelIndex: updatePropertyKernel);				// Update vel and pos
 			Dispatch(compute, positionBuffer.count, kernelIndex: vorticityAndViscosityKernel);		// vorticity not impl.
 		}
 
@@ -408,8 +441,9 @@ namespace Seb.Fluid.Simulation
 			
 			// float poly6Coff = 315f / (64f * Mathf.PI * Mathf.Pow(r, 3));	// Simplified
 			float poly6Coff		= 315f / (64f * Mathf.PI * Mathf.Pow(r, 9));	
-			float spikyCoff		= 15f/ (Mathf.PI * Mathf.Pow(r, 6));
-			float spikyGradCoff = -45f / (Mathf.PI * Mathf.Pow(r, 6));
+			float spikyCoff		= 15f / (Mathf.PI * Mathf.Pow(r, 6));
+			float spikyGradCoff = 45f / (Mathf.PI * Mathf.Pow(r, 6));
+			// float spikyGradCoff = 45f / (Mathf.PI * Mathf.Pow(r, 6));
 
 			compute.SetFloat("K_SpikyPow2", spikyPow2);
 			compute.SetFloat("K_SpikyPow3", spikyPow3);
@@ -462,6 +496,7 @@ namespace Seb.Fluid.Simulation
 			// PBF params
 			compute.SetFloat("rho0", rho_0);
 			compute.SetFloat("inv_rho0", 1f/rho_0);
+
 			compute.SetFloat("lambdaEps", lambda_Eps);
 			compute.SetFloat("DeltaQ", Delta_Q);
 			compute.SetFloat("S_corr_K", Scorr_K);

@@ -211,10 +211,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 647353485}
-  - component: {fileID: 647353484}
+  - component: {fileID: 647353487}
   - component: {fileID: 647353483}
   - component: {fileID: 647353482}
-  - component: {fileID: 647353487}
   m_Layer: 0
   m_Name: Simulation
   m_TagString: Untagged
@@ -258,46 +257,6 @@ MonoBehaviour:
     debugDisplayCol: {r: 0.09019607, g: 0.3801795, b: 1, a: 1}
   debug_num_particles: 410758
   debug_spawn_volume: 686
---- !u!114 &647353484
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 647353481}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c8b3b79f98be3f34e8fefade4cef2ade, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  normalTimeScale: 1
-  slowTimeScale: 0.1
-  maxTimestepFPS: 60
-  iterationsPerFrame: 3
-  gravity: -10
-  smoothingRadius: 0.2
-  targetDensity: 630
-  pressureMultiplier: 288
-  nearPressureMultiplier: 2.16
-  viscosityStrength: 0
-  collisionDamping: 0.95
-  foamActive: 0
-  maxFoamParticleCount: 1280000
-  trappedAirSpawnRate: 70
-  spawnRateFadeInTime: 0.75
-  spawnRateFadeStartTime: 0.1
-  trappedAirVelocityMinMax: {x: 5, y: 25}
-  foamKineticEnergyMinMax: {x: 15, y: 80}
-  bubbleBuoyancy: 1.4
-  sprayClassifyMaxNeighbours: 5
-  bubbleClassifyMinNeighbours: 15
-  bubbleScale: 0.3
-  bubbleChangeScaleSpeed: 7
-  renderToTex3D: 0
-  densityTextureRes: 1
-  compute: {fileID: 7200000, guid: 9443696acfd0ebe4fb503b56d952256c, type: 3}
-  spawner: {fileID: 647353483}
-  DensityMap: {fileID: 0}
 --- !u!4 &647353485
 Transform:
   m_ObjectHideFlags: 0
@@ -351,9 +310,9 @@ MonoBehaviour:
   bubbleChangeScaleSpeed: 7
   renderToTex3D: 0
   densityTextureRes: 1
-  rho_0: 1
+  rho_0: 630
   lambda_Eps: 1000
-  Delta_Q: 0.06
+  Delta_Q: 0.02
   Scorr_K: 0.1
   Scorr_N: 4
   compute: {fileID: 7200000, guid: 4e27bd7a1df0cbc4fbcd78631503a696, type: 3}
@@ -551,7 +510,7 @@ MonoBehaviour:
   gradientResolution: 50
   velocityDisplayMax: 8
   meshResolution: 3
-  sim: {fileID: 647353484}
+  sim: {fileID: 647353487}
   shaderShaded: {fileID: 4800000, guid: 638bb1bdb9b8e374e8a5cbcd595e3973, type: 3}
   shaderBillboard: {fileID: 4800000, guid: 13de1318fe7184e48bdf807b928b641b, type: 3}
 --- !u!4 &1294730517

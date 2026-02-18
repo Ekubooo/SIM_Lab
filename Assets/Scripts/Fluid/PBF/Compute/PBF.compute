@@ -1,4 +1,3 @@
-#pragma kernel ExternalForces
 #pragma kernel UpdateSpatialHash
 #pragma kernel Reorder
 #pragma kernel ReorderCopyBack 
@@ -14,9 +13,8 @@
 #pragma kernel UpdateWhiteParticles
 #pragma kernel WhiteParticlePrepareNextFrame;
 
+
 #include "./PBF3D.hlsl"
-#include "./SpatialHash3D.hlsl"
-#include "./PBFCommon.hlsl"
 
 static const int ThreadGroupSize = 256;
 
@@ -24,20 +22,8 @@ static const int ThreadGroupSize = 256;
 // todo: Rename the PBF3D.hlsl and pass the constant value in update setting.       // finish and check again
 // todo: make sure the radius check of neighbor search is correct.                  // check
 // todo: buffer for kernel not bind yet.        
-// todo: buffer which new set is not init yet.      // ...to be continue here: 0217.
-
-[numthreads(ThreadGroupSize, 1, 1)]
-void ExternalForces(uint3 id : SV_DispatchThreadID)
-{
-    if (id.x >= numParticles)
-        return;
-
-    // External forces (gravity)
-    Velocities[id.x] += float3(0, gravity, 0) * deltaTime;
-
-    // Predict
-    PredictedPositions[id.x] = Positions[id.x] + Velocities[id.x] * 1 / 120.0;
-}
+// todo: buffer which new set is not init yet. 
+// todo: interaction 3d, gravity point and fluid planet
 
 [numthreads(ThreadGroupSize, 1, 1)]
 void UpdateSpatialHash(uint3 id : SV_DispatchThreadID)
@@ -49,7 +35,8 @@ void UpdateSpatialHash(uint3 id : SV_DispatchThreadID)
     int3 cell = GetCell3D(PredictedPositions[index], smoothingRadius);
     uint hash = HashCell3D(cell);
     uint key = KeyFromHash(hash, numParticles);
-
+    
+    SortedIndices[id.x] = id.x;
     SpatialKeys[id.x] = key;
 }
 
@@ -78,8 +65,10 @@ void ReorderCopyBack(uint3 id : SV_DispatchThreadID)
 [numthreads(ThreadGroupSize, 1, 1)]
 void ApplyAndPredict(uint3 id : SV_DispatchThreadID)
 {
-    Velocities[id.x] += deltaTime * float3(0, gravity, 0);  // external force
-    PredictedPositions[id.x] = Positions[id.x] + deltaTime * Velocities[id.x];
+    Velocities[id.x] += deltaTime * float3(0, gravity, 0);  // can be external force point or something.
+    PredictedPositions[id.x] = Positions[id.x] + deltaTime * Velocities[id.x];   // old
+    // PredictedPositions[id.x] = Positions[id.x] + Velocities[id.x] * 1 / 120.0f;   
+    
 }
 
 [numthreads(ThreadGroupSize, 1, 1)]
@@ -122,8 +111,8 @@ void CalcLagrangeOperator(uint3 id : SV_DispatchThreadID)
             // calc
             if (sqrDstToNeighbour > sqrRadius) continue;       // radius check, same as smoothingKernel.
             density += WPoly6(dir2Neighbour, smoothingRadius);
-            float currGrad = WSpikyGrad(dir2Neighbour, smoothingRadius);
-            currGrad *= inv_rho0;           // rember to pass it.
+            float3 currGrad = WSpikyGrad(dir2Neighbour, smoothingRadius);
+            currGrad = currGrad * inv_rho0;           
             grad_i += currGrad;
             if (neighbourIndex != id.x)
             {
@@ -150,7 +139,8 @@ void CalcDeltaPosition(uint3 id : SV_DispatchThreadID)
     float sqrRadius = smoothingRadius * smoothingRadius;
     
     float lambda_i = LOperator[id.x];
-    float WDeltaQ = WSpiky(DeltaQ, smoothingRadius);
+    // float WDeltaQ = WSpiky(DeltaQ, smoothingRadius);
+    float WDeltaQ = WPoly6(float3(DeltaQ, 0, 0), smoothingRadius);
     float3 _deltaPos = float3(0.0f, 0.0f, 0.0f);
     
     for (int i = 0; i < 27; i++)
@@ -174,10 +164,12 @@ void CalcDeltaPosition(uint3 id : SV_DispatchThreadID)
             float dstToNeighbour = length(dir2Neighbour);
 
             // calc
-            float poly6 = WSpiky(dir2Neighbour, smoothingRadius);
-            float S_corr = -S_corr_K * pow(abs(poly6 / WDeltaQ), S_corr_N);
+            // float poly6 = WSpiky(dir2Neighbour, smoothingRadius);
+            float poly6 = WPoly6(dir2Neighbour, smoothingRadius);
+            // float S_corr = -S_corr_K * pow(abs(poly6 / WDeltaQ), S_corr_N);
+            float S_corr = -S_corr_K * pow(poly6 / WDeltaQ, S_corr_N);
             float lambdaSum = lambda_i + lambda_j + S_corr;
-            float currGrad = WSpikyGrad(dir2Neighbour, smoothingRadius);
+            float3 currGrad = WSpikyGrad(dir2Neighbour, smoothingRadius);
             _deltaPos += lambdaSum * currGrad;
         }
     }
