@@ -254,7 +254,7 @@ void ResolveCollisions(inout float3 pos, inout float3 vel, float collisionDampin
     vel = mul(localToWorld, float4(velocityLocal, 0)).xyz;
 }
 
-float2 CalculateDensitiesAtPoint(float3 pos)
+float2 CalculateDensitiesAtPoint(float3 pos)		// none-predict now
 {
     int3 originCell = GetCell3D(pos, smoothingRadius);
     float sqrRadius = smoothingRadius * smoothingRadius;
@@ -278,7 +278,9 @@ float2 CalculateDensitiesAtPoint(float3 pos)
             if (neighbourKey != key)
                 break;
 
-            float3 neighbourPos = PredictedPositions[neighbourIndex];
+        	// float3 neighbourPos = PredictedPositions[neighbourIndex];
+            float3 neighbourPos = Positions[neighbourIndex];	// [Fixed]: using Positon instead of PredictedPositions
+        	
             float3 offsetToNeighbour = neighbourPos - pos;
             float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
 

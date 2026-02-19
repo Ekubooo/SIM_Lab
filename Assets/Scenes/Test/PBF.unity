@@ -294,7 +294,7 @@ MonoBehaviour:
   targetDensity: 630
   pressureMultiplier: 288
   nearPressureMultiplier: 2.16
-  viscosityStrength: 0
+  viscosityStrength: 0.001
   collisionDamping: 0.95
   foamActive: 0
   maxFoamParticleCount: 1280000
@@ -310,8 +310,7 @@ MonoBehaviour:
   bubbleChangeScaleSpeed: 7
   renderToTex3D: 0
   densityTextureRes: 1
-  rho_0: 2500
-  lambda_Eps: 1000
+  lambda_Eps: 10
   Delta_Q: 0.02
   Scorr_K: 0.001
   Scorr_N: 4

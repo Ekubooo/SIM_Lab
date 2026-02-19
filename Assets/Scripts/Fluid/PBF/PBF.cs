@@ -161,9 +161,9 @@ namespace Seb.Fluid.Simulation
 			updatePropertyKernel			= compute.FindKernel("UpdateProperty");
 			vorticityAndViscosityKernel		= compute.FindKernel("VorticityAndViscosity");
 			
-			renderKernel					= compute.FindKernel("UpdateDensityTexture");				// todo: incorrect
-			foamUpdateKernel				= compute.FindKernel("UpdateWhiteParticles");				// todo: incorrect
-			foamReorderCopyBackKernel		= compute.FindKernel("WhiteParticlePrepareNextFrame");		// todo: incorrect
+			renderKernel					= compute.FindKernel("UpdateDensityTexture");				// 
+			foamUpdateKernel				= compute.FindKernel("UpdateWhiteParticles");				// 
+			foamReorderCopyBackKernel		= compute.FindKernel("WhiteParticlePrepareNextFrame");		// 
 			
 			// Create buffers
 			positionBuffer = CreateStructuredBuffer<float3>(numParticles);
@@ -287,7 +287,8 @@ namespace Seb.Fluid.Simulation
 			// Vorticity And Viscosity kernel
 			SetBuffers(compute, vorticityAndViscosityKernel, bufferNameLookup, new ComputeBuffer[]
 			{
-				predictedPositionsBuffer,
+				positionBuffer,
+				predictedPositionsBuffer,	// rm predict
 				velocityBuffer,
 				spatialHash.SpatialKeys,
 				spatialHash.SpatialOffsets
@@ -296,7 +297,8 @@ namespace Seb.Fluid.Simulation
 			// Render to 3d tex kernel
 			SetBuffers(compute, renderKernel, bufferNameLookup, new ComputeBuffer[]
 			{
-				predictedPositionsBuffer,
+				positionBuffer,
+				predictedPositionsBuffer,	// rm predict
 				densityBuffer,
 				spatialHash.SpatialKeys,
 				spatialHash.SpatialOffsets,
@@ -307,7 +309,8 @@ namespace Seb.Fluid.Simulation
 			{
 				foamBuffer,
 				foamCountBuffer,
-				predictedPositionsBuffer,
+				positionBuffer,
+				predictedPositionsBuffer,		// rm predict
 				densityBuffer,
 				velocityBuffer,
 				spatialHash.SpatialKeys,
