@@ -21,7 +21,8 @@ namespace Seb.Fluid.Rendering
 		public float velocityDisplayMax;
 		public int meshResolution;
 
-		[Header("References")] public FluidBase sim;			
+		[Header("References")] 
+		public FluidBase sim;			
 		
 		public Shader shaderShaded;
 		public Shader shaderBillboard;
