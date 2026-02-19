@@ -24,6 +24,7 @@ static const int ThreadGroupSize = 256;
 // todo: buffer for kernel not bind yet.        
 // todo: buffer which new set is not init yet. 
 // todo: interaction 3d, gravity point and fluid planet
+// todo: change the while loop to for loop.
 
 [numthreads(ThreadGroupSize, 1, 1)]
 void UpdateSpatialHash(uint3 id : SV_DispatchThreadID)
@@ -36,7 +37,7 @@ void UpdateSpatialHash(uint3 id : SV_DispatchThreadID)
     uint hash = HashCell3D(cell);
     uint key = KeyFromHash(hash, numParticles);
     
-    SortedIndices[id.x] = id.x;
+    // SortedIndices[id.x] = id.x;
     SpatialKeys[id.x] = key;
 }
 
@@ -65,10 +66,13 @@ void ReorderCopyBack(uint3 id : SV_DispatchThreadID)
 [numthreads(ThreadGroupSize, 1, 1)]
 void ApplyAndPredict(uint3 id : SV_DispatchThreadID)
 {
-    Velocities[id.x] += deltaTime * float3(0, gravity, 0);  // can be external force point or something.
-    PredictedPositions[id.x] = Positions[id.x] + deltaTime * Velocities[id.x];   // old
-    // PredictedPositions[id.x] = Positions[id.x] + Velocities[id.x] * 1 / 120.0f;   
-    
+    // if (id.x >= numParticles) return;
+    float3 currV = Velocities[id.x];
+    currV += deltaTime * float3(0, gravity, 0); 
+    // Velocities[id.x] += deltaTime * float3(0, gravity, 0);
+    // PredictedPositions[id.x] = Positions[id.x] + deltaTime * Velocities[id.x];         // 1/120
+    PredictedPositions[id.x] = Positions[id.x] + deltaTime * currV;        
+    // Velocities[id.x] = currV;    
 }
 
 [numthreads(ThreadGroupSize, 1, 1)]
@@ -97,9 +101,6 @@ void CalcLagrangeOperator(uint3 id : SV_DispatchThreadID)
             uint neighbourIndex = currIndex;
             currIndex += 1;
 
-            // looking at self? sum lambda_i here?      // need?
-            // if (neighbourIndex == id.x) continue;
-
             uint neighbourKey = SpatialKeys[neighbourIndex];
             if (neighbourKey != key) break;
 
@@ -112,7 +113,7 @@ void CalcLagrangeOperator(uint3 id : SV_DispatchThreadID)
             if (sqrDstToNeighbour > sqrRadius) continue;       // radius check, same as smoothingKernel.
             density += WPoly6(dir2Neighbour, smoothingRadius);
             float3 currGrad = WSpikyGrad(dir2Neighbour, smoothingRadius);
-            currGrad = currGrad * inv_rho0;           
+            currGrad = currGrad * inv_rho0;     // ?      
             grad_i += currGrad;
             if (neighbourIndex != id.x)
             {
@@ -123,7 +124,8 @@ void CalcLagrangeOperator(uint3 id : SV_DispatchThreadID)
 
     Densities[id.x] = density;
     float gradSum = grad_j + dot(grad_i, grad_i);
-    float constraint = max(density * inv_rho0 - 1.0f, 0.0f);
+    // float constraint = max(density * inv_rho0 - 1.0f, 0.0f);
+    float constraint = density * inv_rho0 - 1.0f;
         
     float lambda = -constraint / (gradSum + lambdaEps);
     LOperator[id.x] = lambda;
@@ -140,7 +142,7 @@ void CalcDeltaPosition(uint3 id : SV_DispatchThreadID)
     
     float lambda_i = LOperator[id.x];
     // float WDeltaQ = WSpiky(DeltaQ, smoothingRadius);
-    float WDeltaQ = WPoly6(float3(DeltaQ, 0, 0), smoothingRadius);
+    float WDeltaQ = WPoly6(float3(DeltaQ, 0.0f, 0.0f), smoothingRadius);
     float3 _deltaPos = float3(0.0f, 0.0f, 0.0f);
     
     for (int i = 0; i < 27; i++)

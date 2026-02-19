@@ -310,10 +310,10 @@ MonoBehaviour:
   bubbleChangeScaleSpeed: 7
   renderToTex3D: 0
   densityTextureRes: 1
-  rho_0: 630
+  rho_0: 2500
   lambda_Eps: 1000
   Delta_Q: 0.02
-  Scorr_K: 0.1
+  Scorr_K: 0.001
   Scorr_N: 4
   compute: {fileID: 7200000, guid: 4e27bd7a1df0cbc4fbcd78631503a696, type: 3}
   spawner: {fileID: 647353483}
