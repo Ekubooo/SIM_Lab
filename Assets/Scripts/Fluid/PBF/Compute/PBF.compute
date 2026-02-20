@@ -1,18 +1,13 @@
+#pragma kernel ApplyAndPredict
 #pragma kernel UpdateSpatialHash
 #pragma kernel Reorder
 #pragma kernel ReorderCopyBack 
 
-#pragma kernel ApplyAndPredict
 #pragma kernel CalcLagrangeOperator
 #pragma kernel CalcDeltaPosition
 #pragma kernel UpdatePredictPosition
 #pragma kernel UpdateProperty           
 #pragma kernel VorticityAndViscosity    
-
-#pragma kernel UpdateDensityTexture
-#pragma kernel UpdateWhiteParticles
-#pragma kernel WhiteParticlePrepareNextFrame
-
 
 #include "./PBF3D.hlsl"
 
@@ -32,13 +27,13 @@ void ApplyAndPredict(uint3 id : SV_DispatchThreadID)
     if (id.x >= numParticles) return;
     
     float3 currV = Velocities[id.x] + deltaTime * float3(0, gravity, 0);
-    Velocities[id.x] = currV;    
     
     float3 pPos = Positions[id.x] + deltaTime * currV;        
-    ResolveCollisions(pPos ,currV, collisionDamping);
-    PredictedPositions[id.x] = pPos;
+    ResolveCollisions(pPos ,currV, collisionDamping);        
     
-    // PredictedPositions[id.x] = Positions[id.x] + deltaTime * currV;        
+    PredictedPositions[id.x] = pPos;
+    Velocities[id.x] = currV;
+          
 }
 
 [numthreads(ThreadGroupSize, 1, 1)]
@@ -52,7 +47,6 @@ void UpdateSpatialHash(uint3 id : SV_DispatchThreadID)
     uint hash = HashCell3D(cell);
     uint key = KeyFromHash(hash, numParticles);
     
-    // SortedIndices[id.x] = id.x;
     SpatialKeys[id.x] = key;
 }
 
@@ -102,7 +96,7 @@ void CalcLagrangeOperator(uint3 id : SV_DispatchThreadID)
         while (currIndex < numParticles)
         {
             uint neighbourIndex = currIndex;
-            currIndex += 1;
+            currIndex ++;
 
             uint neighbourKey = SpatialKeys[neighbourIndex];
             if (neighbourKey != key) break;
@@ -111,12 +105,13 @@ void CalcLagrangeOperator(uint3 id : SV_DispatchThreadID)
             float3 dir2Neighbour = neighbourPos - currPos;
             float sqrDstToNeighbour = dot(dir2Neighbour, dir2Neighbour);
             float dstToNeighbour = length(dir2Neighbour);
-
+            
+            if (sqrDstToNeighbour > sqrRadius) continue;       
+            
             // calc
-            if (sqrDstToNeighbour > sqrRadius) continue;       // radius check, same as smoothingKernel.
             density += WPoly6(dir2Neighbour, smoothingRadius);
             float3 currGrad = WSpikyGrad(dir2Neighbour, smoothingRadius);
-            currGrad = currGrad * inv_rho0;     // ?      
+            currGrad = currGrad * inv_rho0;           
             grad_i += currGrad;
             if (neighbourIndex != id.x)
             {
@@ -125,11 +120,11 @@ void CalcLagrangeOperator(uint3 id : SV_DispatchThreadID)
         }
     }
 
-    Densities[id.x] = density;
     float gradSum = grad_j + dot(grad_i, grad_i);
     float constraint = max(density * inv_rho0 - 1.0f, 0.0f);
-        
     float lambda = -constraint / (gradSum + lambdaEps);
+    
+    Densities[id.x] = density;
     LOperator[id.x] = lambda;
 }
 
@@ -143,8 +138,8 @@ void CalcDeltaPosition(uint3 id : SV_DispatchThreadID)
     float sqrRadius = smoothingRadius * smoothingRadius;
     
     float lambda_i = LOperator[id.x];
-    // float WDeltaQ = WSpiky(DeltaQ, smoothingRadius);
     float WDeltaQ = WPoly6(float3(DeltaQ, 0.0f, 0.0f), smoothingRadius);
+    // float WDeltaQ = SmoothingKernelPoly6(DeltaQ, smoothingRadius);
     float3 _deltaPos = float3(0.0f, 0.0f, 0.0f);
     
     for (int i = 0; i < 27; i++)
@@ -155,10 +150,9 @@ void CalcDeltaPosition(uint3 id : SV_DispatchThreadID)
         while (currIndex < numParticles)
         {
             uint neighbourIndex = currIndex;
-            currIndex += 1;
+            currIndex ++;
 
             uint neighbourKey = SpatialKeys[neighbourIndex];
-            float lambda_j = LOperator[neighbourIndex];
             float3 neighbourPos = PredictedPositions[neighbourIndex];
             
             if (neighbourKey != key) break;
@@ -166,15 +160,18 @@ void CalcDeltaPosition(uint3 id : SV_DispatchThreadID)
             float3 dir2Neighbour = neighbourPos - currPos;
             float sqrDstToNeighbour = dot(dir2Neighbour, dir2Neighbour);
             float dstToNeighbour = length(dir2Neighbour);
+            
+            // Skip if not within radius
+            if (sqrDstToNeighbour > sqrRadius) continue;
 
             // calc
-            // float poly6 = WSpiky(dir2Neighbour, smoothingRadius);
             float poly6 = WPoly6(dir2Neighbour, smoothingRadius);
             // float S_corr = -S_corr_K * pow(abs(poly6 / WDeltaQ), S_corr_N);
-            float S_corr = -S_corr_K * pow(poly6 / WDeltaQ, S_corr_N);
+            float S_corr = -S_corr_K * pow(abs(poly6 / WDeltaQ), S_corr_N);
+            float lambda_j = LOperator[neighbourIndex];
             float lambdaSum = lambda_i + lambda_j + S_corr;
             float3 currGrad = WSpikyGrad(dir2Neighbour, smoothingRadius);
-            _deltaPos += lambdaSum * currGrad;
+            _deltaPos += lambdaSum * currGrad;      //
         }
     }
     _deltaPos = _deltaPos * inv_rho0;
@@ -185,7 +182,14 @@ void CalcDeltaPosition(uint3 id : SV_DispatchThreadID)
 void UpdatePredictPosition(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles) return;
-    PredictedPositions[id.x] += DeltaPos[id.x];
+    float3 pPos = PredictedPositions[id.x];
+    float3 dPos = DeltaPos[id.x];
+    PredictedPositions[id.x] = pPos + dPos;
+    
+    // float3 pPos = PredictedPositions[id.x] + DeltaPos[id.x];
+    // float3 currVel = pPos/deltaTime;
+    // ResolveCollisions(pPos, currVel, collisionDamping);
+    // PredictedPositions[id.x] = pPos;
 }
 
 [numthreads(ThreadGroupSize, 1, 1)]
@@ -203,7 +207,7 @@ void UpdateProperty(uint3 id : SV_DispatchThreadID)
     
     // update velocity and position
     Velocities[id.x] = currVel;
-    PredictedPositions[id.x];
+    // PredictedPositions[id.x] = currPrePos;
     Positions[id.x] = currPrePos;       // (?) update position here or after vv apply? 
 }
 
@@ -268,133 +272,4 @@ void VorticityAndViscosity(uint3 id : SV_DispatchThreadID)
 
 // rendering //////////////////////////////////////////////////////
 
-[numthreads(8, 8, 8)]
-void UpdateDensityTexture(uint3 id : SV_DispatchThreadID)
-{
-    if (id.x >= densityMapSize.x || id.y >= densityMapSize.y || id.z >= densityMapSize.z)
-        return;
 
-    // Convert threadID to a world-space position, and sample the fluid density at that point
-    float3 texturePos = id / (densityMapSize - 1.0);
-    float3 worldPos = (texturePos - 0.5) * boundsSize;
-    DensityMap[id] = CalculateDensitiesAtPoint(worldPos)[0];
-}
-
-[numthreads(ThreadGroupSize, 1, 1)]
-void UpdateWhiteParticles(uint3 id : SV_DispatchThreadID)
-{
-    // Early exit if thread index exceeds particle count
-    if (id.x >= min(MaxWhiteParticleCount, WhiteParticleCounters[0])) return;
-
-    // Update particle
-    float deltaTime = whiteParticleDeltaTime;
-    WhiteParticle particle = WhiteParticles[id.x];
-
-    // -- Neighbour fluid partices ---
-    int3 originCell = GetCell3D(particle.position, smoothingRadius);
-    float sqrRadius = smoothingRadius * smoothingRadius;
-    int neighbourCount = 0;
-    float3 velocitySum = 0;
-    float weightSum = 0;
-
-    for (int i = 0; i < 27; i++)
-    {
-        uint hash = HashCell3D(originCell + offsets3D[i]);
-        uint key = KeyFromHash(hash, numParticles);
-        uint currIndex = SpatialOffsets[key];
-
-        while (currIndex < numParticles)
-        {
-            uint neighbourIndex = currIndex;
-            currIndex++;
-
-            uint neighbourKey = SpatialKeys[neighbourIndex];
-            // Exit if no longer looking at correct bin
-            if (neighbourKey != key)
-                break;
-
-            // float3 neighbourPos = PredictedPositions[neighbourIndex];
-            float3 neighbourPos = Positions[neighbourIndex];
-            float3 offsetToNeighbour = neighbourPos - particle.position;
-            float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
-
-            if (sqrDstToNeighbour < sqrRadius)
-            {
-                float dstToNeighbour = sqrt(sqrDstToNeighbour);
-                float influenceWeight = SmoothingKernelPoly6(dstToNeighbour, smoothingRadius);
-
-                // Add up velocities of nearby fluid particles, weighted smoothly by distance.
-                // Also add up the weights so that we can compute the average fluid velocity.
-                velocitySum += Velocities[neighbourIndex] * influenceWeight;
-                weightSum += influenceWeight;
-
-                neighbourCount += 1;
-            }
-        }
-    }
-
-    // -- Classify --
-    bool isSpray = neighbourCount <= sprayClassifyMaxNeighbours;
-    bool isBubble = neighbourCount >= bubbleClassifyMinNeighbours;
-    bool isFoam = !(isSpray || isBubble);
-
-    // Foam is transported by the fluid
-    if (isFoam)
-    {
-        // We want the foam to be carried by the fluid (not just accelerated by it),
-        // so the velocity is directly set to the average velocity of surrounding fluid.
-        particle.velocity = velocitySum / weightSum;
-        // Dissolve the foam over time
-        particle.remainingLifetime -= deltaTime;
-    }
-    // Bubbles are accelerated by the surrounding fluid, and moved upwards due to buoyancy
-    else if (isBubble)
-    {
-        const float fluidAccelMul = 3; // How fast the bubble accelerates to match velocity with fluid
-        float3 accelerationBuoyancy = float3(0, gravity, 0) * (1 - bubbleBuoyancy);
-        float3 accelerationFluid = (velocitySum / weightSum - particle.velocity) * fluidAccelMul;
-        particle.velocity += (accelerationBuoyancy + accelerationFluid) * deltaTime;
-    }
-    // Spray is affected by gravity and drag
-    else if (isSpray)
-    {
-        const float dragMultiplier = 0.04;
-        float sqrSpeed = dot(particle.velocity, particle.velocity);
-        float3 drag = -normalize(particle.velocity) * sqrSpeed * dragMultiplier;
-        particle.velocity += (float3(0, gravity, 0) + drag) * deltaTime;
-    }
-
-    float targetScale = isBubble ? bubbleScale : 1;
-    particle.scale = lerp(particle.scale, targetScale, deltaTime * bubbleScaleChangeSpeed);
-    particle.position += particle.velocity * deltaTime;
-
-    const float collisionDampening = 0.1;
-    ResolveCollisions(particle.position, particle.velocity, collisionDampening);
-    WhiteParticles[id.x] = particle;
-
-    // Compact the surviving particles into temporary buffer
-    if (particle.remainingLifetime > 0)
-    {
-        uint survivorIndex;
-        InterlockedAdd(WhiteParticleCounters[1], 1, survivorIndex);
-        WhiteParticlesCompacted[survivorIndex] = particle;
-    }
-}
-
-[numthreads(ThreadGroupSize, 1, 1)]
-void WhiteParticlePrepareNextFrame(uint3 id : SV_DispatchThreadID)
-{
-    if (id.x >= MaxWhiteParticleCount) return;
-
-    // Copy the surviving particles back into the main particle buffer
-    if (id.x < WhiteParticleCounters[1])
-    {
-        WhiteParticles[id.x] = WhiteParticlesCompacted[id.x];
-    }
-
-    // Set active particle count to the survivor count
-    if (id.x == 0)
-    {
-        WhiteParticleCounters[0] = WhiteParticleCounters[1];
-    }
-}

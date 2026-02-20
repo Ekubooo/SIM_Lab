@@ -40,12 +40,12 @@ const float2 interactionInputPoint;
 const float interactionInputStrength;
 const float interactionInputRadius;
 
-const float rho0;           // check again
-const float inv_rho0;       // check again
-const float lambdaEps;      // check again
-const float DeltaQ;         // check again
-const float S_corr_K;       // check again
-const float S_corr_N;       // check again
+const float rho0;     
+const float inv_rho0; 
+const float lambdaEps;
+const float DeltaQ;   
+const float S_corr_K; 
+const float S_corr_N; 
 
 // Volume texture settings
 RWTexture3D<float> DensityMap;
@@ -60,11 +60,11 @@ struct WhiteParticle
     float scale;
 };
 
+// Holds 2 values:
+// [0] = ActiveCount: (num particles alive or spawned in at the start of the frame)
+// [1] = SurvivorCount: (num particles surviving to the next frame -- copied into compact buffer)
 RWStructuredBuffer<WhiteParticle> WhiteParticles;
 RWStructuredBuffer<WhiteParticle> WhiteParticlesCompacted;
-// Holds 2 values:
-	// [0] = ActiveCount: (num particles alive or spawned in at the start of the frame)
-	// [1] = SurvivorCount: (num particles surviving to the next frame -- copied into compact buffer)
 RWStructuredBuffer<uint> WhiteParticleCounters;
 const uint MaxWhiteParticleCount;
 const float whiteParticleDeltaTime;
@@ -222,38 +222,6 @@ float Remap01(float val, float minVal, float maxVal)
     return saturate((val - minVal) / (maxVal - minVal));
 }
 
-void ResolveCollisions(inout float3 pos, inout float3 vel, float collisionDamping)
-{
-    // Transform position/velocity to the local space of the bounding box
-    float3 posLocal = mul(worldToLocal, float4(pos, 1)).xyz;
-    float3 velocityLocal = mul(worldToLocal, float4(vel, 0)).xyz;
-
-    // Calculate distance from box on each axis (negative values are outside box)
-    const float3 halfSize = 0.5;
-    const float3 edgeDst = halfSize - abs(posLocal);
-
-    // Resolve collisions
-    if (edgeDst.x <= 0)
-    {
-        posLocal.x = halfSize.x * sign(posLocal.x);
-        velocityLocal.x *= -1 * collisionDamping;
-    }
-    if (edgeDst.y <= 0)
-    {
-        posLocal.y = halfSize.y * sign(posLocal.y);
-        velocityLocal.y *= -1 * collisionDamping;
-    }
-    if (edgeDst.z <= 0)
-    {
-        posLocal.z = halfSize.z * sign(posLocal.z);
-        velocityLocal.z *= -1 * collisionDamping;
-    }
-
-    // Transform resolved position/velocity back to world space
-    pos = mul(localToWorld, float4(posLocal, 1)).xyz;
-    vel = mul(localToWorld, float4(velocityLocal, 0)).xyz;
-}
-
 float2 CalculateDensitiesAtPoint(float3 pos)		// none-predict now
 {
     int3 originCell = GetCell3D(pos, smoothingRadius);
@@ -301,5 +269,38 @@ float2 CalculateDensitiesAtPoint(float3 pos)		// none-predict now
     return float2(density, nearDensity);
 }
 
+void ResolveCollisions(inout float3 pos, inout float3 vel, float collisionDamping)
+{
+	// Transform position/velocity to the local space of the bounding box
+	 float3 posLocal = mul(worldToLocal, float4(pos, 1)).xyz;
+	 float3 velocityLocal = mul(worldToLocal, float4(vel, 0)).xyz;
+	
+	// Calculate distance from box on each axis (negative values are outside box)
+	const float3 halfSize = 0.5 - 0.001;
+	// const float3 halfSize = boundsSize * 0.5f - 0.001f;
+	
+	const float3 edgeDst = halfSize - abs(posLocal);
+
+	// Resolve collisions
+	if (edgeDst.x <= 0)
+	{
+		posLocal.x = halfSize.x * sign(posLocal.x);
+		velocityLocal.x *= -1 * collisionDamping;
+	}
+	if (edgeDst.y <= 0)
+	{
+		posLocal.y = halfSize.y * sign(posLocal.y);
+		velocityLocal.y *= -1 * collisionDamping;
+	}
+	if (edgeDst.z <= 0)
+	{
+		posLocal.z = halfSize.z * sign(posLocal.z);
+		velocityLocal.z *= -1 * collisionDamping;
+	}
+
+	// Transform resolved position/velocity back to world space
+	pos = mul(localToWorld, float4(posLocal, 1)).xyz;
+	vel = mul(localToWorld, float4(velocityLocal, 0)).xyz;
+}
 
 
