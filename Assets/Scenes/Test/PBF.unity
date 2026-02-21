@@ -294,8 +294,8 @@ MonoBehaviour:
   targetDensity: 630
   pressureMultiplier: 288
   nearPressureMultiplier: 2.16
-  viscosityStrength: 0
-  collisionDamping: 0.95
+  viscosityStrength: 0.025
+  collisionDamping: 0.99
   foamActive: 0
   maxFoamParticleCount: 1280000
   trappedAirSpawnRate: 70
@@ -310,10 +310,10 @@ MonoBehaviour:
   bubbleChangeScaleSpeed: 7
   renderToTex3D: 0
   densityTextureRes: 1
-  lambda_Eps: 1000
-  Scorr_K: 0.001
-  Scorr_N: 4
-  compute: {fileID: 7200000, guid: 4e27bd7a1df0cbc4fbcd78631503a696, type: 3}
+  lambdaEps: 1000
+  S_corr_K: 0.00001
+  S_corr_N: 4
+  compute: {fileID: 7200000, guid: 8aa7688a0fc94c6782e8b87ef05c7619, type: 3}
   spawner: {fileID: 647353483}
   DensityMap: {fileID: 0}
 --- !u!1 &881847624

@@ -1,39 +1,303 @@
 #pragma kernel ApplyAndPredict
 #pragma kernel UpdateSpatialHash
 #pragma kernel Reorder
-#pragma kernel ReorderCopyBack 
+#pragma kernel ReorderCopyBack
 
-#pragma kernel CalcLagrangeOperator
-#pragma kernel CalcDeltaPosition
-#pragma kernel UpdatePredictPosition
-#pragma kernel UpdateProperty           
-#pragma kernel VorticityAndViscosity    
+#pragma kernel CalcLagrangeOperator  
+#pragma kernel CalcDeltaPosition  
+#pragma kernel UpdatePredictPosition  
+#pragma kernel UpdateProperty  
 
-#include "./PBF3D.hlsl"
+#pragma kernel CalculateViscosity
+#pragma kernel UpdateDensityTexture 
+#pragma kernel UpdateWhiteParticles 
+#pragma kernel WhiteParticlePrepareNextFrame
+
+
+#include "./FluidMaths3D.hlsl"
+#include "./SpatialHash3D.hlsl"
 
 static const int ThreadGroupSize = 256;
+static const float epsilon = 1e-5;
+static const float preDeltaTime = 1/120.0;
 
-// todo: Refactor the compute shaer file and updateSettings func in main script.
-// todo: Rename the PBF3D.hlsl and pass the constant value in update setting.       // finish and check again
-// todo: make sure the radius check of neighbor search is correct.                  // check
-// todo: buffer for kernel not bind yet.        
-// todo: buffer which new set is not init yet. 
-// todo: interaction 3d, gravity point and fluid planet
-// todo: change the while loop to for loop.
+// Buffers
+RWStructuredBuffer<float3> Positions;
+RWStructuredBuffer<float3> PredictedPositions;
+RWStructuredBuffer<float3> Velocities;
+RWStructuredBuffer<float3> DeltaPosition;
+RWStructuredBuffer<float> Densities; 
+RWStructuredBuffer<float> LOperator;               
+
+
+// Spatial hashing
+RWStructuredBuffer<uint> SpatialKeys;
+RWStructuredBuffer<uint> SpatialOffsets;
+StructuredBuffer<uint> SortedIndices;
+
+RWStructuredBuffer<float3> Debug;
+
+RWStructuredBuffer<float3> SortTarget_Positions;
+RWStructuredBuffer<float3> SortTarget_PredictedPositions;
+RWStructuredBuffer<float3> SortTarget_Velocities;
+
+// Settings
+const uint numParticles;
+const float gravity;
+const float deltaTime;
+const float simTime;
+const float collisionDamping;
+const float smoothingRadius;
+const float targetDensity;
+const float pressureMultiplier;
+const float nearPressureMultiplier;
+const float viscosityStrength;
+const float edgeForce;
+const float edgeForceDst;
+const float3 boundsSize;
+
+const float4x4 localToWorld;
+const float4x4 worldToLocal;
+
+const float2 interactionInputPoint;
+const float interactionInputStrength;
+const float interactionInputRadius;
+
+const float g_MaxDeltaVel;      
+
+// PBF params       
+const float rho0;
+const float inv_rho0;
+const float lambdaEps;
+const float deltaQ;
+const float S_corr_K;
+const float S_corr_N;
+
+// Volume texture settings
+RWTexture3D<float> DensityMap;
+const uint3 densityMapSize;
+
+// ---- Foam, spray, and bubbles ----
+struct WhiteParticle
+{
+    float3 position;
+    float3 velocity;
+    float remainingLifetime;
+    float scale;
+};
+
+RWStructuredBuffer<WhiteParticle> WhiteParticles;
+RWStructuredBuffer<WhiteParticle> WhiteParticlesCompacted;
+RWStructuredBuffer<uint> WhiteParticleCounters;
+const uint MaxWhiteParticleCount;
+const float whiteParticleDeltaTime;
+
+const float3 trappedAirParams;
+const float2 kineticEnergyParams;
+const float bubbleBuoyancy;
+const int bubbleClassifyMinNeighbours;
+const int sprayClassifyMaxNeighbours;
+const float bubbleScale;
+const float bubbleScaleChangeSpeed;
+
+float Remap01(float val, float minVal, float maxVal)
+{
+    return saturate((val - minVal) / (maxVal - minVal));
+}
+
+float2 CalculateDensitiesAtPoint(float3 pos)
+{
+    int3 originCell = GetCell3D(pos, smoothingRadius);
+    float sqrRadius = smoothingRadius * smoothingRadius;
+    float density = 0;
+    float nearDensity = 0;
+
+    // Neighbour search
+    for (int i = 0; i < 27; i++)
+    {
+        uint hash = HashCell3D(originCell + offsets3D[i]);
+        uint key = KeyFromHash(hash, numParticles);
+        uint currIndex = SpatialOffsets[key];
+
+        while (currIndex < numParticles)
+        {
+            uint neighbourIndex = currIndex;
+            currIndex++;
+
+            uint neighbourKey = SpatialKeys[neighbourIndex];
+            // Exit if no longer looking at correct bin
+            if (neighbourKey != key)
+                break;
+
+            float3 neighbourPos = PredictedPositions[neighbourIndex];
+            float3 offsetToNeighbour = neighbourPos - pos;
+            float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
+
+            // Skip if not within radius
+            if (sqrDstToNeighbour > sqrRadius)
+                continue;
+
+            // Calculate density and near density
+            float dst = sqrt(sqrDstToNeighbour);
+            density += DensityKernel(dst, smoothingRadius);
+            nearDensity += NearDensityKernel(dst, smoothingRadius);
+        }
+    }
+
+    return float2(density, nearDensity);
+}
+
+uint NextRandom(inout uint state)
+{
+    state = state * 747796405 + 2891336453;
+    uint result = ((state >> ((state >> 28) + 4)) ^ state) * 277803737;
+    result = (result >> 22) ^ result;
+    return result;
+}
+
+float RandomValue(inout uint state)
+{
+    return NextRandom(state) / 4294967295.0; // 2^32 - 1
+}
+
+float3 CalculateOrthonormal(float3 dir)
+{
+    float a = sign((sign(dir.x) + 0.5) * (sign(dir.z) + 0.5));
+    float b = sign((sign(dir.y) + 0.5) * (sign(dir.z) + 0.5));
+    float3 orthoVec = float3(a * dir.z, b * dir.z, -a * dir.x - b * dir.y);
+    return normalize(orthoVec);
+}
+
+void ResolveCollisions(inout float3 pos, inout float3 vel, float collisionDamping)
+{
+    // Transform position/velocity to the local space of the bounding box
+    float3 posLocal = mul(worldToLocal, float4(pos, 1)).xyz;
+    float3 velocityLocal = mul(worldToLocal, float4(vel, 0)).xyz;
+
+    // Calculate distance from box on each axis (negative values are outside box)
+    const float3 halfSize = 0.5;
+    const float3 edgeDst = halfSize - abs(posLocal);
+
+    // Resolve collisions
+    if (edgeDst.x <= 0)
+    {
+        posLocal.x = halfSize.x * sign(posLocal.x);
+        velocityLocal.x *= -1 * collisionDamping;
+    }
+    if (edgeDst.y <= 0)
+    {
+        posLocal.y = halfSize.y * sign(posLocal.y);
+        velocityLocal.y *= -1 * collisionDamping;
+    }
+    if (edgeDst.z <= 0)
+    {
+        posLocal.z = halfSize.z * sign(posLocal.z);
+        velocityLocal.z *= -1 * collisionDamping;
+    }
+
+    // Transform resolved position/velocity back to world space
+    pos = mul(localToWorld, float4(posLocal, 1)).xyz;
+    vel = mul(localToWorld, float4(velocityLocal, 0)).xyz;
+}
+
+void PosClapming2(inout float3 pos)
+{
+    // complicated one
+    uint seedX = asuint(pos.x);
+    uint seedY = asuint(pos.y);
+    uint seedZ = asuint(pos.z);
+    uint rngState = seedX * seedY * seedZ;
+    NextRandom(rngState);
+    
+    float3 posLocal = mul(worldToLocal, float4(pos, 1)).xyz;
+    float localScale = length(mul(worldToLocal, float4(1, 0, 0, 0)).xyz);
+    float LPRadius = smoothingRadius * localScale;
+    const float3 effectRadius = float3(0.5, 0.5, 0.5) - float3(LPRadius ,LPRadius,LPRadius);
+    const float3 edgeDst = effectRadius - abs(posLocal);
+
+    if (edgeDst.x <= 0)
+    {
+        float jitterX = RandomValue(rngState) * epsilon;
+        posLocal.x = (effectRadius.x - jitterX) * sign(posLocal.x);
+    }
+    if (edgeDst.y <= 0)
+    {
+        float jitterY = RandomValue(rngState) * epsilon;
+        posLocal.y = (effectRadius.y - jitterY) * sign(posLocal.y);
+    }
+    if (edgeDst.z <= 0)
+    {
+        float jitterZ = RandomValue(rngState) * epsilon;
+        posLocal.z = (effectRadius.z - jitterZ) * sign(posLocal.z);
+    }
+    
+    pos = mul(localToWorld, float4(posLocal, 1)).xyz;
+}
+
+void PosClapming1(inout float3 pos)
+{
+    // Transform position/velocity to the local space of the bounding box
+    float3 posLocal = mul(worldToLocal, float4(pos, 1)).xyz;
+
+    // Calculate distance from box on each axis (negative values are outside box)
+    const float3 halfSize = 0.5;
+    const float3 edgeDst = halfSize - abs(posLocal);
+
+    // Resolve collisions
+    if (edgeDst.x <= 0) posLocal.x = halfSize.x * sign(posLocal.x);
+    if (edgeDst.y <= 0) posLocal.y = halfSize.y * sign(posLocal.y);
+    if (edgeDst.z <= 0) posLocal.z = halfSize.z * sign(posLocal.z);
+    
+    // Transform resolved position/velocity back to world space
+    pos = mul(localToWorld, float4(posLocal, 1)).xyz;
+}
+
+void PosClapming(inout float3 pos)
+{
+    uint seedX = asuint(pos.x);
+    uint seedY = asuint(pos.y);
+    uint seedZ = asuint(pos.z);
+    uint rngState = seedX * seedY * seedZ;
+    NextRandom(rngState);
+    
+    float3 posLocal = mul(worldToLocal, float4(pos, 1)).xyz;
+    const float3 halfSize = 0.5;
+    const float3 edgeDst = halfSize - abs(posLocal);
+
+    if (edgeDst.x <= 0)
+    {
+        float jitterX = RandomValue(rngState) * epsilon;
+        posLocal.x = (halfSize.x - jitterX) * sign(posLocal.x);
+    }
+    if (edgeDst.y <= 0)
+    {
+        float jitterY = RandomValue(rngState) * epsilon;
+        posLocal.y = (halfSize.y - jitterY) * sign(posLocal.y);
+    }
+    if (edgeDst.z <= 0)
+    {
+        float jitterZ = RandomValue(rngState) * epsilon;
+        posLocal.z = (halfSize.z - jitterZ) * sign(posLocal.z);
+    }
+    
+    pos = mul(localToWorld, float4(posLocal, 1)).xyz;
+}
+
 
 [numthreads(ThreadGroupSize, 1, 1)]
 void ApplyAndPredict(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles) return;
     
-    float3 currV = Velocities[id.x] + deltaTime * float3(0, gravity, 0);
-    
-    float3 pPos = Positions[id.x] + deltaTime * currV;        
-    ResolveCollisions(pPos ,currV, collisionDamping);        
+    // Velocities[id.x] += deltaTime * float3(0, gravity, 0);
+    // float3 pPos = Positions[id.x] + deltaTime * Velocities[id.x];
+
+    float3 currVel =  Velocities[id.x] + deltaTime * float3(0, gravity, 0);
+    float3 pPos = Positions[id.x] + currVel * deltaTime;
+    ResolveCollisions(pPos, currVel, collisionDamping);    
     
     PredictedPositions[id.x] = pPos;
-    Velocities[id.x] = currV;
-          
+    Velocities[id.x] = currVel;
 }
 
 [numthreads(ThreadGroupSize, 1, 1)]
@@ -46,7 +310,7 @@ void UpdateSpatialHash(uint3 id : SV_DispatchThreadID)
     int3 cell = GetCell3D(PredictedPositions[index], smoothingRadius);
     uint hash = HashCell3D(cell);
     uint key = KeyFromHash(hash, numParticles);
-    
+
     SpatialKeys[id.x] = key;
 }
 
@@ -75,48 +339,60 @@ void ReorderCopyBack(uint3 id : SV_DispatchThreadID)
 [numthreads(ThreadGroupSize, 1, 1)]
 void CalcLagrangeOperator(uint3 id : SV_DispatchThreadID)
 {
-    if (id.x >= numParticles) return;
+    if (id.x >= numParticles)
+        return;
 
-    float3 currPos = PredictedPositions[id.x];
-    float density = 0;
-    
-    int3 originCell = GetCell3D(currPos, smoothingRadius);
-    float sqrRadius = smoothingRadius * smoothingRadius;
-
-    float3 grad_i = float3(0.0f, 0.0f, 0.0f);
+    // Calculate pressure
+    // float density = Densities[id.x];    // no density
+    float density = 0;  
     float grad_j = 0;
-    
+    float3 grad_i = float3(0.0f, 0.0f, 0.0f);
+
+    float3 pos = PredictedPositions[id.x];
+    int3 originCell = GetCell3D(pos, smoothingRadius);
+    float sqrRadius = smoothingRadius * smoothingRadius;
+    int neighbourCount = 0;
+
     // Neighbour search
     for (int i = 0; i < 27; i++)
     {
         uint hash = HashCell3D(originCell + offsets3D[i]);
         uint key = KeyFromHash(hash, numParticles);
-        uint currIndex = SpatialOffsets[key];       // start index?
+        uint currIndex = SpatialOffsets[key];
 
         while (currIndex < numParticles)
         {
             uint neighbourIndex = currIndex;
-            currIndex ++;
+            currIndex++;
+
+            // Skip if looking at self
+            // if (neighbourIndex == id.x) continue;       // issue: self lambda need count
 
             uint neighbourKey = SpatialKeys[neighbourIndex];
+            // Exit if no longer looking at correct bin
             if (neighbourKey != key) break;
 
             float3 neighbourPos = PredictedPositions[neighbourIndex];
-            float3 dir2Neighbour = neighbourPos - currPos;
-            float sqrDstToNeighbour = dot(dir2Neighbour, dir2Neighbour);
-            float dstToNeighbour = length(dir2Neighbour);
-            
-            if (sqrDstToNeighbour > sqrRadius) continue;       
+            float3 offsetToNeighbour = neighbourPos - pos;
+            float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
+
+            // Skip if not within radius
+            if (sqrDstToNeighbour > sqrRadius) continue;
+
+            float dstToNeighbour = sqrt(sqrDstToNeighbour);
+            float3 dirToNeighbour = dstToNeighbour > 0 ? offsetToNeighbour / dstToNeighbour : float3(0, 0, 0);  // float3(0, 1, 0)
+            neighbourCount++;
             
             // calc
-            density += WPoly6(dir2Neighbour, smoothingRadius);
-            float3 currGrad = WSpikyGrad(dir2Neighbour, smoothingRadius);
-            currGrad = currGrad * inv_rho0;           
+            density += SmoothingKernelPoly6(dstToNeighbour, smoothingRadius);      
+            float3 currGrad = dirToNeighbour * inv_rho0 * DerivativeSpikyPow3(dstToNeighbour, smoothingRadius);
             grad_i += currGrad;
+            
             if (neighbourIndex != id.x)
             {
                 grad_j += dot(currGrad, currGrad);
             }
+            
         }
     }
 
@@ -124,22 +400,25 @@ void CalcLagrangeOperator(uint3 id : SV_DispatchThreadID)
     float constraint = max(density * inv_rho0 - 1.0f, 0.0f);
     float lambda = -constraint / (gradSum + lambdaEps);
     
-    Densities[id.x] = density;
+    Densities[id.x] = density;    
     LOperator[id.x] = lambda;
+    
 }
 
 [numthreads(ThreadGroupSize, 1, 1)]
 void CalcDeltaPosition(uint3 id : SV_DispatchThreadID)
 {
-    if (id.x >= numParticles) return;
+    if (id.x >= numParticles) 
+        return;
 
-    float currPos = PredictedPositions[id.x];
-    int3 originCell = GetCell3D(currPos, smoothingRadius);
+    float3 pos = PredictedPositions[id.x];
+    int3 originCell = GetCell3D(pos, smoothingRadius);
     float sqrRadius = smoothingRadius * smoothingRadius;
+    int neighbourCount = 0;
     
     float lambda_i = LOperator[id.x];
-    float WDeltaQ = WPoly6(float3(DeltaQ, 0.0f, 0.0f), smoothingRadius);
-    // float WDeltaQ = SmoothingKernelPoly6(DeltaQ, smoothingRadius);
+    // float WDeltaQ = WSpiky(DeltaQ, smoothingRadius);
+    float WDeltaQ = SmoothingKernelPoly6(deltaQ, smoothingRadius);
     float3 _deltaPos = float3(0.0f, 0.0f, 0.0f);
     
     for (int i = 0; i < 27; i++)
@@ -147,82 +426,87 @@ void CalcDeltaPosition(uint3 id : SV_DispatchThreadID)
         uint hash = HashCell3D(originCell + offsets3D[i]);
         uint key = KeyFromHash(hash, numParticles);
         uint currIndex = SpatialOffsets[key];
+
         while (currIndex < numParticles)
         {
             uint neighbourIndex = currIndex;
-            currIndex ++;
+            currIndex++;
+
+            // Skip if looking at self
+            if (neighbourIndex == id.x) continue;
 
             uint neighbourKey = SpatialKeys[neighbourIndex];
-            float3 neighbourPos = PredictedPositions[neighbourIndex];
-            
+            // Exit if no longer looking at correct bin
             if (neighbourKey != key) break;
 
-            float3 dir2Neighbour = neighbourPos - currPos;
-            float sqrDstToNeighbour = dot(dir2Neighbour, dir2Neighbour);
-            float dstToNeighbour = length(dir2Neighbour);
-            
+            float3 neighbourPos = PredictedPositions[neighbourIndex];
+            float3 offsetToNeighbour = neighbourPos - pos;
+            float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
+
             // Skip if not within radius
             if (sqrDstToNeighbour > sqrRadius) continue;
 
+            float dstToNeighbour = sqrt(sqrDstToNeighbour);
+            float3 dirToNeighbour = dstToNeighbour > 0 ? offsetToNeighbour / dstToNeighbour : float3(0, 0, 0); // (0, 1, 0) aslo fine, maybe?
+            neighbourCount++;
+
             // calc
-            float poly6 = WPoly6(dir2Neighbour, smoothingRadius);
-            // float S_corr = -S_corr_K * pow(abs(poly6 / WDeltaQ), S_corr_N);
+            // float poly6 = WSpiky(dir2Neighbour, smoothingRadius);
+            float poly6 = SmoothingKernelPoly6(dstToNeighbour, smoothingRadius);
             float S_corr = -S_corr_K * pow(abs(poly6 / WDeltaQ), S_corr_N);
+            // float S_corr = -S_corr_K * pow(poly6 / WDeltaQ, S_corr_N);
             float lambda_j = LOperator[neighbourIndex];
-            float lambdaSum = lambda_i + lambda_j + S_corr;
-            float3 currGrad = WSpikyGrad(dir2Neighbour, smoothingRadius);
-            _deltaPos += lambdaSum * currGrad;      //
+            float lambdaSum = lambda_i + lambda_j + S_corr;   
+            float3 currGrad = dirToNeighbour * DerivativeSpikyPow3(dstToNeighbour, smoothingRadius);     // issue of inv_rho0
+            _deltaPos -= lambdaSum * currGrad;
         }
     }
+    
     _deltaPos = _deltaPos * inv_rho0;
-    DeltaPos[id.x] = _deltaPos;
+    DeltaPosition[id.x] = _deltaPos;
 }
 
 [numthreads(ThreadGroupSize, 1, 1)]
 void UpdatePredictPosition(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles) return;
-    float3 pPos = PredictedPositions[id.x];
-    float3 dPos = DeltaPos[id.x];
-    PredictedPositions[id.x] = pPos + dPos;
-    
-    // float3 pPos = PredictedPositions[id.x] + DeltaPos[id.x];
-    // float3 currVel = pPos/deltaTime;
-    // ResolveCollisions(pPos, currVel, collisionDamping);
-    // PredictedPositions[id.x] = pPos;
+    float3 currPos = PredictedPositions[id.x] + DeltaPosition[id.x];
+    PosClapming(currPos);             // 1 is good, 3 not stable
+    PredictedPositions[id.x] = currPos;
 }
 
 [numthreads(ThreadGroupSize, 1, 1)]
 void UpdateProperty(uint3 id : SV_DispatchThreadID)
 {
-    if (id.x >= numParticles) return;
+    float3 pPos = PredictedPositions[id.x];
+    float3 pos = Positions[id.x];
+    float3 vel = (pPos - pos) / deltaTime;
+    float3 currVel = Velocities[id.x];
+    float3 deltaVel = vel - currVel;
+    float deltaVelLenSQR = dot(deltaVel, deltaVel);
+    if (deltaVelLenSQR > g_MaxDeltaVel * g_MaxDeltaVel)
+    {
+        deltaVel = deltaVel * rsqrt(deltaVelLenSQR) * g_MaxDeltaVel;
+    }
+    currVel += deltaVel;
+    // ResolveCollisions(pPos, currVel, collisionDamping);
+    Velocities[id.x] = currVel;     
+    Positions[id.x] = pPos;
+    // Velocities[id.x] = vel;    
     
-    float3 currPos = Positions[id.x];
-    float3 currPrePos = PredictedPositions[id.x];
-    float3 currVel = (currPrePos - currPos) / deltaTime;
-    
-    
-    // collision (?here)
-    ResolveCollisions(currPrePos, currVel, collisionDamping);
-    
-    // update velocity and position
-    Velocities[id.x] = currVel;
-    // PredictedPositions[id.x] = currPrePos;
-    Positions[id.x] = currPrePos;       // (?) update position here or after vv apply? 
 }
 
 [numthreads(ThreadGroupSize, 1, 1)]
-void VorticityAndViscosity(uint3 id : SV_DispatchThreadID)
+void CalculateViscosity(uint3 id : SV_DispatchThreadID)
 {
-    if (id.x >= numParticles) return;
+    if (id.x >= numParticles)
+        return;
 
-    // float3 pos = PredictedPositions[id.x];      
-    float3 pos = Positions[id.x];      // [Fixed]: using Positon instead of PredictedPositions
+    float3 pos = PredictedPositions[id.x];
     int3 originCell = GetCell3D(pos, smoothingRadius);
     float sqrRadius = smoothingRadius * smoothingRadius;
 
-    float3 viscosityForce = float3(0.0f, 0.0f, 0.0f);
-    float3 vorticityForce = float3(0.0f, 0.0f, 0.0f);
+    float3 viscosityForce = 0;
     float3 velocity = Velocities[id.x];
 
     // Neighbour search
@@ -235,41 +519,161 @@ void VorticityAndViscosity(uint3 id : SV_DispatchThreadID)
         while (currIndex < numParticles)
         {
             uint neighbourIndex = currIndex;
-            currIndex += 1;
+            currIndex++;
 
             uint neighbourKey = SpatialKeys[neighbourIndex];
             // Exit if no longer looking at correct bin
-            if (neighbourKey != key) break;
-            
-            // Skip if looking at self
-            if (neighbourIndex == id.x) continue;
+            if (neighbourKey != key)
+                break;
 
-            // float3 neighbourPos = PredictedPositions[neighbourIndex];
-            float3 neighbourPos = Positions[neighbourIndex];    // [Fixed]: using Positon instead of PredictedPositions
-            float3 dir2Neighbour = neighbourPos - pos;
-            float sqrDstToNeighbour = dot(dir2Neighbour, dir2Neighbour);
+
+            // Skip if looking at self
+            if (neighbourIndex == id.x)
+                continue;
+
+            float3 neighbourPos = PredictedPositions[neighbourIndex];
+            float3 offsetToNeighbour = neighbourPos - pos;
+            float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
 
             // Skip if not within radius
-            if (sqrDstToNeighbour > sqrRadius) continue;     // need or not? radius check can be in smoothing kernel
+            if (sqrDstToNeighbour > sqrRadius)
+                continue;
 
+            // Calculate viscosity
             float dst = sqrt(sqrDstToNeighbour);
             float3 neighbourVelocity = Velocities[neighbourIndex];
-                // V_ij = V_j - V_i
-            float3 V_ij = neighbourVelocity - velocity;
-            
-            // viscosity
-            viscosityForce += V_ij * WPoly6(dir2Neighbour, smoothingRadius);
-            
-            // vorticity    // to be continue here
-            // float3 omega = cross(V_ij, WSpikyGrad(dir2Neighbour, smoothingRadius));
-            // vorticityForce = ...;
+            viscosityForce += (neighbourVelocity - velocity) * SmoothingKernelPoly6(dst, smoothingRadius);
         }
     }
-    // PBF: viscosityStrength set as 0.01 is good
-    // Velocities[id.x] += viscosityForce * viscosityStrength;     
-    Velocities[id.x] += viscosityForce * viscosityStrength * deltaTime;     
+    Velocities[id.x] += viscosityForce * viscosityStrength * deltaTime;
 }
 
-// rendering //////////////////////////////////////////////////////
+[numthreads(8, 8, 8)]
+void UpdateDensityTexture(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= densityMapSize.x || id.y >= densityMapSize.y || id.z >= densityMapSize.z)
+        return;
 
+    // Convert threadID to a world-space position, and sample the fluid density at that point
+    float3 texturePos = id / (densityMapSize - 1.0);
+    float3 worldPos = (texturePos - 0.5) * boundsSize;
+    DensityMap[id] = CalculateDensitiesAtPoint(worldPos)[0];
+}
 
+[numthreads(ThreadGroupSize, 1, 1)]
+void UpdateWhiteParticles(uint3 id : SV_DispatchThreadID)
+{
+    // Early exit if thread index exceeds particle count
+    if (id.x >= min(MaxWhiteParticleCount, WhiteParticleCounters[0])) return;
+
+    // Update particle
+    float deltaTime = whiteParticleDeltaTime;
+    WhiteParticle particle = WhiteParticles[id.x];
+
+    // -- Neighbour fluid partices ---
+    int3 originCell = GetCell3D(particle.position, smoothingRadius);
+    float sqrRadius = smoothingRadius * smoothingRadius;
+    int neighbourCount = 0;
+    float3 velocitySum = 0;
+    float weightSum = 0;
+
+    for (int i = 0; i < 27; i++)
+    {
+        uint hash = HashCell3D(originCell + offsets3D[i]);
+        uint key = KeyFromHash(hash, numParticles);
+        uint currIndex = SpatialOffsets[key];
+
+        while (currIndex < numParticles)
+        {
+            uint neighbourIndex = currIndex;
+            currIndex++;
+
+            uint neighbourKey = SpatialKeys[neighbourIndex];
+            // Exit if no longer looking at correct bin
+            if (neighbourKey != key)
+                break;
+
+            float3 neighbourPos = PredictedPositions[neighbourIndex];
+            float3 offsetToNeighbour = neighbourPos - particle.position;
+            float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
+
+            if (sqrDstToNeighbour < sqrRadius)
+            {
+                float dstToNeighbour = sqrt(sqrDstToNeighbour);
+                float influenceWeight = SmoothingKernelPoly6(dstToNeighbour, smoothingRadius);
+
+                // Add up velocities of nearby fluid particles, weighted smoothly by distance.
+                // Also add up the weights so that we can compute the average fluid velocity.
+                velocitySum += Velocities[neighbourIndex] * influenceWeight;
+                weightSum += influenceWeight;
+
+                neighbourCount += 1;
+            }
+        }
+    }
+
+    // -- Classify --
+    bool isSpray = neighbourCount <= sprayClassifyMaxNeighbours;
+    bool isBubble = neighbourCount >= bubbleClassifyMinNeighbours;
+    bool isFoam = !(isSpray || isBubble);
+
+    // Foam is transported by the fluid
+    if (isFoam)
+    {
+        // We want the foam to be carried by the fluid (not just accelerated by it),
+        // so the velocity is directly set to the average velocity of surrounding fluid.
+        particle.velocity = velocitySum / weightSum;
+        // Dissolve the foam over time
+        particle.remainingLifetime -= deltaTime;
+    }
+    // Bubbles are accelerated by the surrounding fluid, and moved upwards due to buoyancy
+    else if (isBubble)
+    {
+        const float fluidAccelMul = 3; // How fast the bubble accelerates to match velocity with fluid
+        float3 accelerationBuoyancy = float3(0, gravity, 0) * (1 - bubbleBuoyancy);
+        float3 accelerationFluid = (velocitySum / weightSum - particle.velocity) * fluidAccelMul;
+        particle.velocity += (accelerationBuoyancy + accelerationFluid) * deltaTime;
+    }
+    // Spray is affected by gravity and drag
+    else if (isSpray)
+    {
+        const float dragMultiplier = 0.04;
+        float sqrSpeed = dot(particle.velocity, particle.velocity);
+        float3 drag = -normalize(particle.velocity) * sqrSpeed * dragMultiplier;
+        particle.velocity += (float3(0, gravity, 0) + drag) * deltaTime;
+    }
+
+    float targetScale = isBubble ? bubbleScale : 1;
+    particle.scale = lerp(particle.scale, targetScale, deltaTime * bubbleScaleChangeSpeed);
+    particle.position += particle.velocity * deltaTime;
+
+    const float collisionDampening = 0.1;
+    ResolveCollisions(particle.position, particle.velocity, collisionDampening);
+    WhiteParticles[id.x] = particle;
+
+    // Compact the surviving particles into temporary buffer
+    if (particle.remainingLifetime > 0)
+    {
+        uint survivorIndex;
+        InterlockedAdd(WhiteParticleCounters[1], 1, survivorIndex);
+        WhiteParticlesCompacted[survivorIndex] = particle;
+    }
+}
+
+[numthreads(ThreadGroupSize, 1, 1)]
+void WhiteParticlePrepareNextFrame(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= MaxWhiteParticleCount) return;
+
+    // Copy the surviving particles back into the main particle buffer
+    if (id.x < WhiteParticleCounters[1])
+    {
+        WhiteParticles[id.x] = WhiteParticlesCompacted[id.x];
+    }
+
+    // Set active particle count to the survivor count
+    if (id.x == 0)
+    {
+        WhiteParticleCounters[0] = WhiteParticleCounters[1];
+    }
+}
