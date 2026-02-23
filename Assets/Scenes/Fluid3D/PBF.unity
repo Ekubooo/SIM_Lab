@@ -285,7 +285,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Seb.Fluid.Simulation.PBF
   normalTimeScale: 1
-  slowTimeScale: 0.1
+  slowTimeScale: 0.5
   maxTimestepFPS: 60
   iterationsPerFrame: 3
   maxSolverIterations: 5

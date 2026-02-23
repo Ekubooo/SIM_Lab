@@ -15,7 +15,7 @@ namespace Seb.Fluid.Simulation
 
 		[Header("Time Step")] 
 		public float normalTimeScale = 1;
-		public float slowTimeScale = 0.1f;
+		public float slowTimeScale = 0.5f;
 		public float maxTimestepFPS = 60; // if time-step dips lower than this fps, simulation will run slower (set to 0 to disable)
 		public int iterationsPerFrame = 3;
 		public int maxSolverIterations = 3;
@@ -295,10 +295,9 @@ namespace Seb.Fluid.Simulation
 			// Run simulation
 			if (!isPaused)
 			{
-				float maxDeltaTime = maxTimestepFPS > 0 ? 1 / maxTimestepFPS : float.PositiveInfinity; 
-				// If framerate dips too low, run the simulation slower than real-time
-				float dt = Mathf.Min(Time.deltaTime * ActiveTimeScale, maxDeltaTime);
+				float dt = (1f / maxTimestepFPS) * ActiveTimeScale;
 				RunSimulationFrame(dt);
+				// RunSimulationFrame(1f/60f);
 			}
 
 			if (pauseNextFrame)
