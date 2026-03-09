@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class PBDExample : MonoBehaviour
+public class Example : MonoBehaviour
 {
     private ClothSimulation _simulate = new ClothSimulation();
 

@@ -4,7 +4,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-public class PBD
+public class ClothSimulation
 {
     [System.Serializable]
     public class SimulateSetting{
@@ -65,7 +65,7 @@ public class PBD
     private int _groupX;
     private int _groupY;
 
-    public PBD(){
+    public ClothSimulation(){
         _groupX = _vertexCountPerDim / THREAD_X;
         _groupY = _vertexCountPerDim / THREAD_Y;
     }
