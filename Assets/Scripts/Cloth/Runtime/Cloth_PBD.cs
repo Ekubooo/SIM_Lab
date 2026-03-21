@@ -21,7 +21,7 @@ public class Cloth_PBD
     private static ComputeShader CS{
         get{
             if(!_cs){
-                _cs = Resources.Load<ComputeShader>("ClothCS");
+                _cs = Resources.Load<ComputeShader>("PBD");
             }
             return _cs;
         }
