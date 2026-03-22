@@ -4,6 +4,10 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 
+// Issues: 
+// 1. jacobi or Gauss-Seidel?
+// 
+
 public class Cloth_PBD
 {
     [System.Serializable]

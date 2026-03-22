@@ -4,6 +4,8 @@
 #pragma kernel StepV
 #pragma kernel StepP
 
+// todo: new kernel not #pragma yet
+
 
 //所有质点的位置
 RWStructuredBuffer<float4> positions;
@@ -239,4 +241,34 @@ void StepP (uint3 id : SV_DispatchThreadID)
         return;
     }
     stepPosition(id.xy);
+}
+
+[numthreads(Group_Size,1,1)]
+void ExternalForce(uint3 id:  SV_DispatchThreadID)
+{
+    
+}
+
+[numthreads(Group_Size,1,1)]
+void ApplyAndPredicate(uint3 id:  SV_DispatchThreadID)
+{
+    
+}
+
+[numthreads(Group_Size,1,1)]
+void generateCollisionConstraints(uint3 id:  SV_DispatchThreadID)
+{
+    
+}
+
+[numthreads(Group_Size,1,1)]
+void projectConstraints(uint3 id:  SV_DispatchThreadID)
+{
+    
+}
+
+[numthreads(Group_Size,1,1)]
+void UpdateProperty(uint3 id:  SV_DispatchThreadID)
+{
+    
 }
