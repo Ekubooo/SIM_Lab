@@ -4,9 +4,11 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 
+// Including GPU Helper. 
+using static Seb.Helpers.ComputeHelper;
+
 // Issues: 
-// 1. jacobi or Gauss-Seidel?
-// 
+// 1. jacobi approach
 
 public class Cloth_PBD
 {
@@ -173,9 +175,18 @@ public class Cloth_PBD
         while(true){
             dt += Time.deltaTime;
             while(dt > minDt){
-                CS.SetFloat("deltaTime",minDt);
-                CS.Dispatch(_kernelStepVelocity,_groupX,_groupY,1);
-                CS.Dispatch(_kernelStepPosition,_groupX,_groupY,1);
+                // solver iteration
+                for (int i = 0; i < 3; i++)
+                {
+                    CS.SetFloat("deltaTime",minDt);
+                    CS.Dispatch(_kernelStepVelocity,_groupX,_groupY,1);
+                    CS.Dispatch(_kernelStepPosition,_groupX,_groupY,1);
+                    // CS.Dispatch(_kernelExternForce, _groupX, _groupY, 1);
+                    // CS.Dispatch(_kernelPredicit, _groupX, _groupY, 1);
+                    // CS.Dispatch(_kernelCollision, _groupX, _groupY, 1);
+                    // CS.Dispatch(_kernelProjection, _groupX, _groupY, 1);
+                    // CS.Dispatch(_kernelUpdateProperty, _groupX, _groupY, 1);
+                }
                 dt -= minDt;
             }
             yield return null;

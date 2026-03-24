@@ -1,9 +1,9 @@
-﻿// Each #kernel tells which function to compile; you can have many kernels
+﻿#include "calcPBD.hlsl"
 
-#pragma kernel Init
-#pragma kernel StepV
-#pragma kernel StepP
+#pragma kernel InitPara
 
+
+// todo: new kernel not #pragma yet
 
 //所有质点的位置
 RWStructuredBuffer<float4> positions;
@@ -11,6 +11,10 @@ RWStructuredBuffer<float4> positions;
 RWStructuredBuffer<float3> velocities;
 //法线
 RWStructuredBuffer<float4> normals;
+// Predicate Pos
+RWStructuredBuffer<float4> prePos;      // not init.
+
+
 
 //x表示横向质点数量，y表示纵向质点数量,z = x * y
 uint4 size;
@@ -45,7 +49,8 @@ float deltaTime;
 ///球形碰撞体
 uniform float4 collisionBall;
 
-
+// GPU Setting
+static const int Group_Size = 256;
 
 //结构弹簧的4个方向
 static uint2 SpringDirs[12] = {
@@ -215,28 +220,68 @@ static void stepPosition(uint2 id){
 #define THREAD_X 8
 #define THREAD_Y 8
 
-//生成网格
-[numthreads(THREAD_X,THREAD_Y,1)]
-void Init (uint3 id : SV_DispatchThreadID)
+// new ////////////////////////////////////////////////
+static void PBD_ExternalForce(uint2 id)
 {
-    uint index = getIndex(id.xy);
+    uint index = getIndex(id);
+    float3 f = calculateF(id);  // TODO: force but not spring.
+    float3 a = f * rcp(M);
+    float3 velocity = getVelocity(index);
+    velocity = velocity + a * dt;
+    velocities[index] = velocity;
+    updateNormal(id);
+}
+
+static void PredicatePosition(uint2 id)
+{
+    uint index = getIndex(id);
+    prePos[index] = positions[index] + float4(velocities[index] * deltaTime, 0);
+    
+}
+
+
+[numthreads(Group_Size,1,1)]
+void InitPara(uint3 id:  SV_DispatchThreadID)
+{   
+    uint index = getIndex(id.xy);    // incorrect of id.
     positions[index] = float4(id.x * L0,0,id.y * L0,0);
     velocities[index] = float3(0,0,0);
     normals[index] = float4(0,1,0,0);
 }
 
-[numthreads(THREAD_X,THREAD_Y,1)]
-void StepV (uint3 id : SV_DispatchThreadID)
+[numthreads(Group_Size,1,1)]
+void ExternalForce(uint3 id:  SV_DispatchThreadID)
 {
-    stepVelocity(id.xy);
+    PBD_ExternalForce(id.xy);
+    // dampingVelocity();
 }
 
-[numthreads(THREAD_X,THREAD_Y,1)]
-void StepP (uint3 id : SV_DispatchThreadID)
+[numthreads(Group_Size,1,1)]
+void ApplyAndPredicate(uint3 id:  SV_DispatchThreadID)
 {
-    if(id.y == 0 && (id.x == 0 || id.x == size.x - 1) ){
-        //pin two corner
-        return;
-    }
-    stepPosition(id.xy);
+    // PredicatePosition();
+}
+
+[numthreads(Group_Size,1,1)]
+void generateCollisionConstraints(uint3 id:  SV_DispatchThreadID)
+{
+    // collision();
+}
+
+[numthreads(Group_Size,1,1)]
+void projectConstraints(uint3 id:  SV_DispatchThreadID)
+{
+    uint index = getIndex(id.xy);
+    float3 deltaPos = float3(0,0,0);
+    
+    // calc projection for deltaPos
+    prePos[index] += float4(deltaPos, 0);
+}
+
+[numthreads(Group_Size,1,1)]
+void UpdateProperty(uint3 id:  SV_DispatchThreadID)
+{
+    uint index = getIndex(id.xy);
+    velocities[index] = (prePos[index] - positions[index]) / deltaTime;
+    positions[index] = prePos[index];
 }
