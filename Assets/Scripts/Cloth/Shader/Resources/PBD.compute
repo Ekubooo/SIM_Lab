@@ -1,42 +1,36 @@
 ﻿#include "calcPBD.hlsl"
 
 #pragma kernel InitPara
+#pragma kernel ApplyAndPredicate
+#pragma kernel projectConstraints
+#pragma kernel UpdateProperty
 
-
-// todo: new kernel not #pragma yet
-
-//所有质点的位置
 RWStructuredBuffer<float4> positions;
-//所有质点的速度
 RWStructuredBuffer<float3> velocities;
-//法线
 RWStructuredBuffer<float4> normals;
-// Predicate Pos
 RWStructuredBuffer<float4> prePos;      // not init.
 
-
-
-//x表示横向质点数量，y表示纵向质点数量,z = x * y
+// x表示横向质点数量，y表示纵向质点数量,z = x * y
 uint4 size;
 
-//弹性系数,xyz分别对应结构弹簧、剪力弹簧、弯曲弹簧
+// 弹性系数,xyz分别对应结构弹簧、剪力弹簧、弯曲弹簧
 float3 springKs;
 
-//弹簧在松弛状态下的长度。xyz分别对应结构弹簧、剪力弹簧、弯曲弹簧
+// restLengths
 uniform float3 restLengths;
 
-//单个质点的质量
+// mass for single point
 uniform float mass;
 
-//阻尼系数
+// damping factor
 #define Cd 0.5
 
-//流体(风)参数
+// 流体(风)参数
 float4 viscousFluidArgs;
 #define Uf viscousFluidArgs.xyz
 #define Cv viscousFluidArgs.w
 
-//单次迭代时间间隔
+// 单次迭代时间间隔
 float deltaTime;
 #define dt deltaTime
 
@@ -46,15 +40,15 @@ float deltaTime;
 #define M mass
 
 
-///球形碰撞体
+// 球形碰撞体
 uniform float4 collisionBall;
 
 // GPU Setting
 static const int Group_Size = 256;
 
-float dampingFactor;    // dnot set
-float d;        // rest length, not set and incorrect yet.
-                // length by spring type.
+float dampingFactor;    // not set
+float d;                // rest length, not set and incorrect yet.
+                        // length by spring type.
 
 //结构弹簧的4个方向
 static uint2 SpringDirs[12] = {
@@ -169,6 +163,7 @@ static float3 calcExForce(uint2 id)
     float3 normal = getNormal(index);
     float3 fv = Cv * (dot(normal,Uf - currVel)) * normal;
     f += fv;
+    return f;
 }
 
 
