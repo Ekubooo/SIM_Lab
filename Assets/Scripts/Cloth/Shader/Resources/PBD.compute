@@ -52,6 +52,10 @@ uniform float4 collisionBall;
 // GPU Setting
 static const int Group_Size = 256;
 
+float dampingFactor;    // dnot set
+float d;        // rest length, not set and incorrect yet.
+                // length by spring type.
+
 //结构弹簧的4个方向
 static uint2 SpringDirs[12] = {
     //结构力
@@ -147,6 +151,26 @@ static float3 calculateF(uint2 id){
     return calculateF(id,getPosition(index),getVelocity(index));
 }
 
+static float3 calcExForce(uint2 id)
+{
+    uint index = getIndex(id);
+    float3 currVel = getVelocity(index);
+    float3 f = float3(0,0,0);
+    
+    // damping
+    float3 fd = - Cd * currVel;
+    f += fd;
+
+    // gravity
+    float3 fg = float3(0,-9.8,0) * M;
+    f += fg;
+
+    // wind
+    float3 normal = getNormal(index);
+    float3 fv = Cv * (dot(normal,Uf - currVel)) * normal;
+    f += fv;
+}
+
 
 static uint2 normalCompuDirs[4] = {
     {1,0},
@@ -158,11 +182,13 @@ static uint2 normalCompuDirs[4] = {
 static void updateNormal(uint2 id){
     float3 p = getPosition(id);
     float3 normal = float3(0,0,0);
-    for(uint i = 0; i < 4; i ++){
+    for(uint i = 0; i < 4; i ++)
+    {
         uint j = (i + 1) % 4;
         uint2 id1 = id + normalCompuDirs[i];
         uint2 id2 = id + normalCompuDirs[j];
-        if(isValidateId(id1) && isValidateId(id2)){
+        if(isValidateId(id1) && isValidateId(id2))
+        {
             float3 p1 = getPosition(id1);
             float3 p2 = getPosition(id2);
             float3 e1 = p1 - p;
@@ -221,25 +247,6 @@ static void stepPosition(uint2 id){
 #define THREAD_Y 8
 
 // new ////////////////////////////////////////////////
-static void PBD_ExternalForce(uint2 id)
-{
-    uint index = getIndex(id);
-    float3 f = calculateF(id);  // TODO: force but not spring.
-    float3 a = f * rcp(M);
-    float3 velocity = getVelocity(index);
-    velocity = velocity + a * dt;
-    velocities[index] = velocity;
-    updateNormal(id);
-}
-
-static void PredicatePosition(uint2 id)
-{
-    uint index = getIndex(id);
-    prePos[index] = positions[index] + float4(velocities[index] * deltaTime, 0);
-    
-}
-
-
 [numthreads(Group_Size,1,1)]
 void InitPara(uint3 id:  SV_DispatchThreadID)
 {   
@@ -250,21 +257,21 @@ void InitPara(uint3 id:  SV_DispatchThreadID)
 }
 
 [numthreads(Group_Size,1,1)]
-void ExternalForce(uint3 id:  SV_DispatchThreadID)
-{
-    PBD_ExternalForce(id.xy);
-    // dampingVelocity();
-}
-
-[numthreads(Group_Size,1,1)]
 void ApplyAndPredicate(uint3 id:  SV_DispatchThreadID)
 {
-    // PredicatePosition();
-}
-
-[numthreads(Group_Size,1,1)]
-void generateCollisionConstraints(uint3 id:  SV_DispatchThreadID)
-{
+    uint index = getIndex(id.xy);
+    
+    // external force
+    float3 f = calcExForce(id);  // damping in it
+    float3 a = f * rcp(M);
+    float3 velocity = getVelocity(index) + a * dt;
+    velocities[index] = velocity;
+    updateNormal(id);
+    
+    // predicate
+    prePos[index] = positions[index] + float4(velocities[index] * deltaTime, 0);
+    
+    // collision constraint;
     // collision();
 }
 
@@ -272,10 +279,24 @@ void generateCollisionConstraints(uint3 id:  SV_DispatchThreadID)
 void projectConstraints(uint3 id:  SV_DispatchThreadID)
 {
     uint index = getIndex(id.xy);
+    float3 currPos = getPosition(index);
     float3 deltaPos = float3(0,0,0);
     
     // calc projection for deltaPos
-    prePos[index] += float4(deltaPos, 0);
+    // direction: gradient not required anymore, just get dir of spring.
+    for(uint i = 0; i < 12; i ++)
+    {
+        uint2 nId = id + SpringDirs[i];
+        uint nIndex = getIndex(nId);
+        if(isValidateId(nId))
+        {
+            float3 nPos = getPosition(nIndex);
+            float3 curr2Neighbor = normalize(nPos - currPos);       // dir: if is p1-p2 then add(-)
+            float3 springLength = length(nPos - currPos);
+            deltaPos += 0.5 * (springLength - d) * curr2Neighbor; 
+        }
+    }
+    prePos[index] += float4(deltaPos, 0);   // z = 0 or z = 1 ??? refer to affine transform.
 }
 
 [numthreads(Group_Size,1,1)]

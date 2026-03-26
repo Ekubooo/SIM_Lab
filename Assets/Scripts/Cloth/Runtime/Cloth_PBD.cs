@@ -176,11 +176,11 @@ public class Cloth_PBD
             dt += Time.deltaTime;
             while(dt > minDt){
                 // solver iteration
-                for (int i = 0; i < 3; i++)
+                for (int i = 0; i < 5; i++)
                 {
                     CS.SetFloat("deltaTime",minDt);
-                    CS.Dispatch(_kernelStepVelocity,_groupX,_groupY,1);
-                    CS.Dispatch(_kernelStepPosition,_groupX,_groupY,1);
+                    // CS.Dispatch(_kernelStepVelocity,_groupX,_groupY,1);
+                    // CS.Dispatch(_kernelStepPosition,_groupX,_groupY,1);
                     // CS.Dispatch(_kernelExternForce, _groupX, _groupY, 1);
                     // CS.Dispatch(_kernelPredicit, _groupX, _groupY, 1);
                     // CS.Dispatch(_kernelCollision, _groupX, _groupY, 1);
