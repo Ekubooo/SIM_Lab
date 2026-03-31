@@ -408,6 +408,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1133721625}
   - component: {fileID: 1133721626}
+  - component: {fileID: 1133721627}
   m_Layer: 0
   m_Name: Example
   m_TagString: Untagged
@@ -437,11 +438,30 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1133721624}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d520742926b0dab4c924ab6eb4c71bc6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _setting:
+    wind: {x: 0, y: 0, z: 10}
+    windMultiplyAtNormal: 0
+    springKs: {x: 25000, y: 25000, z: 25000}
+    mass: 1
+    stepTime: 0.003
+  ball: {fileID: 1128184619}
+--- !u!114 &1133721627
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1133721624}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b62f5bb8172243749137211143d4aa55, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Example_pbd
   _setting:
     wind: {x: 0, y: 0, z: 10}
     windMultiplyAtNormal: 0

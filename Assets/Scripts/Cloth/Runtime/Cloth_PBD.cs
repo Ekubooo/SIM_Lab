@@ -9,11 +9,13 @@ using static Seb.Helpers.ComputeHelper;
 
 // Issues: 
 // 1. jacobi approach
+// 2. buffer not set
 
 public class Cloth_PBD
 {
     [System.Serializable]
-    public class SimulateSetting{
+    public class SimulateSetting
+    {
         public Vector3 wind = new Vector3(0,0,10);
         public float windMultiplyAtNormal = 0f;
         public Vector3 springKs = new Vector3(25000,25000,25000);
@@ -55,6 +57,9 @@ public class Cloth_PBD
 
     private ComputeBuffer _velocitiesBuffer;
 
+    private ComputeBuffer _predicateBuffer;
+
+    
     private const int THREAD_X = 8;
     private const int THREAD_Y = 8;
 
@@ -108,14 +113,18 @@ public class Cloth_PBD
 
         this.UpdateSimulateSetting();
 
-        _positionBuffer = new ComputeBuffer(totalVertex,16);
-        _velocitiesBuffer = new ComputeBuffer(totalVertex,16);
-        _normalBuffer = new ComputeBuffer(totalVertex,16);
+        _positionBuffer    = new ComputeBuffer(totalVertex,16);
+        _velocitiesBuffer  = new ComputeBuffer(totalVertex,16);
+        _normalBuffer      = new ComputeBuffer(totalVertex,16);
+        _predicateBuffer   = new ComputeBuffer(totalVertex,16);
+        
 
-        System.Action<int> setBufferForKernet = (k)=>{
+        System.Action<int> setBufferForKernet = (k)=>
+        {
             CS.SetBuffer(k,"velocities",_velocitiesBuffer);
             CS.SetBuffer(k,"positions",_positionBuffer);
             CS.SetBuffer(k,"normals",_normalBuffer);
+            CS.SetBuffer(k,"prePos", _predicateBuffer);
         };
 
         setBufferForKernet(_kernelInitPara);

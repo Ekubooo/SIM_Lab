@@ -2,15 +2,11 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Example : MonoBehaviour
+public class Example_pbd : MonoBehaviour
 {
-    private ClothSimulation _simulate = new ClothSimulation();
+    private Cloth_PBD _simulate = new Cloth_PBD();
     [SerializeField]
-    private ClothSimulation.SimulateSetting _setting = new ClothSimulation.SimulateSetting();
-    
-    // private Cloth_PBD _pbd = new Cloth_PBD();
-    // [SerializeField]
-    // private Cloth_PBD.SimulateSetting _pbd_setting = new Cloth_PBD.SimulateSetting();
+    private Cloth_PBD.SimulateSetting _setting = new Cloth_PBD.SimulateSetting();
 
     public GameObject ball;
 
