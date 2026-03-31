@@ -140,23 +140,22 @@ public class Cloth_PBD
         material.SetBuffer(ShaderIDs.position, _positionBuffer );
         material.SetBuffer(ShaderIDs.normals,_normalBuffer);
 
-        return AsyncGPUReadback.Request(_positionBuffer,(req)=>{
-            if(req.hasError){
-                Debug.LogError("Init error");
-            }
-            if(req.done && !req.hasError){
-                _initialized = true;
-            }
+        return AsyncGPUReadback.Request(_positionBuffer,(req)=>
+        {
+            if(req.hasError) Debug.LogError("Init error");
+            if(req.done && !req.hasError) _initialized = true;
         });
     }
 
     GraphicsBuffer _indexBuffer;
 
-	static class ShaderIDs {
+	static class ShaderIDs 
+    {
 		public static int position = Shader.PropertyToID( "_positions" );
         public static int normals = Shader.PropertyToID( "_normals" );
 	}
-    private void CreateIndexBuffer(){
+    private void CreateIndexBuffer()
+    {
         var vertexCount = _vertexCountPerDim;
         var quadCount = (vertexCount - 1) * (vertexCount - 1);
         _indexBuffer = new GraphicsBuffer( GraphicsBuffer.Target.Index, quadCount * 6, sizeof( int ) );
@@ -188,7 +187,8 @@ public class Cloth_PBD
         while(true)
         {
             dt += Time.deltaTime;
-            while(dt > minDt){
+            while(dt > minDt)
+            {
                 CS.SetFloat("deltaTime",minDt);
                 CS.Dispatch(_kernelApplyAndPredicate, _groupX, _groupY, 1);
                 // solver iteration
@@ -216,17 +216,25 @@ public class Cloth_PBD
     public void Dispose()
     {
         Debug.Log("release buffers");
-        if(_positionBuffer != null){
+        if(_positionBuffer != null)
+        {
             _positionBuffer.Release();
             _positionBuffer = null;
         }
-        if(_velocitiesBuffer != null){
+        if(_velocitiesBuffer != null)
+        {
             _velocitiesBuffer.Release();
             _velocitiesBuffer = null;
         }
-        if(_indexBuffer != null){
+        if(_indexBuffer != null)
+        {
             _indexBuffer.Release();
             _indexBuffer = null;
+        }
+        if(_predicateBuffer != null)
+        {
+            _predicateBuffer.Release();
+            _predicateBuffer = null;
         }
     }
 }
