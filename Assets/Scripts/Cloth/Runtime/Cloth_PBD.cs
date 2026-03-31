@@ -64,9 +64,10 @@ public class Cloth_PBD
 
     private bool _initialized = false;
 
-    private int _kernelInit;
-    private int _kernelStepVelocity;
-    private int _kernelStepPosition;
+    private int _kernelInitPara;
+    private int _kernelApplyAndPredicate;
+    private int _kernelProjectConstraints;
+    private int _kernelUpdateProperty;
 
     private int _groupX;
     private int _groupY;
@@ -94,9 +95,10 @@ public class Cloth_PBD
     }
  
     public AsyncGPUReadbackRequest Initialize(){
-        _kernelInit = CS.FindKernel("Init");
-        _kernelStepVelocity = CS.FindKernel("StepV");
-        _kernelStepPosition = CS.FindKernel("StepP");
+        _kernelInitPara = CS.FindKernel("InitPara");
+        _kernelApplyAndPredicate = CS.FindKernel("ApplyAndPredicate");
+        _kernelProjectConstraints = CS.FindKernel("ProjectConstraints");
+        _kernelUpdateProperty = CS.FindKernel("UpdateProperty");
      
         var vertexCount = _vertexCountPerDim;
         var totalVertex = vertexCount * vertexCount;
@@ -116,11 +118,12 @@ public class Cloth_PBD
             CS.SetBuffer(k,"normals",_normalBuffer);
         };
 
-        setBufferForKernet(_kernelInit);
-        setBufferForKernet(_kernelStepVelocity);
-        setBufferForKernet(_kernelStepPosition);
+        setBufferForKernet(_kernelInitPara);
+        setBufferForKernet(_kernelApplyAndPredicate);
+        setBufferForKernet(_kernelProjectConstraints);
+        setBufferForKernet(_kernelUpdateProperty);
 
-        CS.Dispatch(_kernelInit,_groupX,_groupY,1);
+        CS.Dispatch(_kernelInitPara,_groupX,_groupY,1);
 
         _totalVertexCount = totalVertex;
 
@@ -168,25 +171,23 @@ public class Cloth_PBD
     }
 
 
-    public IEnumerator StartAsync(){
+    public IEnumerator StartAsync()
+    {
         yield return Initialize();
         float dt = 0;
         float minDt = _simulateSetting.stepTime;
-        while(true){
+        while(true)
+        {
             dt += Time.deltaTime;
             while(dt > minDt){
+                CS.SetFloat("deltaTime",minDt);
+                CS.Dispatch(_kernelApplyAndPredicate, _groupX, _groupY, 1);
                 // solver iteration
                 for (int i = 0; i < 5; i++)
                 {
-                    CS.SetFloat("deltaTime",minDt);
-                    // CS.Dispatch(_kernelStepVelocity,_groupX,_groupY,1);
-                    // CS.Dispatch(_kernelStepPosition,_groupX,_groupY,1);
-                    // CS.Dispatch(_kernelExternForce, _groupX, _groupY, 1);
-                    // CS.Dispatch(_kernelPredicit, _groupX, _groupY, 1);
-                    // CS.Dispatch(_kernelCollision, _groupX, _groupY, 1);
-                    // CS.Dispatch(_kernelProjection, _groupX, _groupY, 1);
-                    // CS.Dispatch(_kernelUpdateProperty, _groupX, _groupY, 1);
+                    CS.Dispatch(_kernelProjectConstraints, _groupX, _groupY, 1);
                 }
+                CS.Dispatch(_kernelUpdateProperty, _groupX, _groupY, 1);
                 dt -= minDt;
             }
             yield return null;
@@ -194,7 +195,8 @@ public class Cloth_PBD
         }
     }
 
-    public void Draw(){
+    public void Draw()
+    {
         if(!_initialized){
             return;
         }
@@ -202,7 +204,8 @@ public class Cloth_PBD
         Graphics.DrawProceduralNow(MeshTopology.Triangles,_indexBuffer,_indexBuffer.count,1);
     }
 
-    public void Dispose(){
+    public void Dispose()
+    {
         Debug.Log("release buffers");
         if(_positionBuffer != null){
             _positionBuffer.Release();

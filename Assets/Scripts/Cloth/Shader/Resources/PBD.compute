@@ -2,7 +2,7 @@
 
 #pragma kernel InitPara
 #pragma kernel ApplyAndPredicate
-#pragma kernel projectConstraints
+#pragma kernel ProjectConstraints 
 #pragma kernel UpdateProperty
 
 RWStructuredBuffer<float4> positions;
@@ -271,7 +271,7 @@ void ApplyAndPredicate(uint3 id:  SV_DispatchThreadID)
 }
 
 [numthreads(Group_Size,1,1)]
-void projectConstraints(uint3 id:  SV_DispatchThreadID)
+void ProjectConstraints(uint3 id:  SV_DispatchThreadID)
 {
     uint index = getIndex(id.xy);
     float3 currPos = getPosition(index);
