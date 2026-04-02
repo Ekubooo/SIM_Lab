@@ -8,7 +8,7 @@
 RWStructuredBuffer<float4> positions;
 RWStructuredBuffer<float3> velocities;
 RWStructuredBuffer<float4> normals;
-RWStructuredBuffer<float4> prePos;      // not init.
+RWStructuredBuffer<float4> prePos;      
 
 // x表示横向质点数量，y表示纵向质点数量,z = x * y
 uint4 size;
@@ -281,7 +281,7 @@ void ApplyAndPredicate(uint3 id:  SV_DispatchThreadID)
 void ProjectConstraints(uint3 id:  SV_DispatchThreadID)
 {
     uint index = getIndex(id.xy);
-    float3 currPos = getPredicatePosition(index);
+    float3 currPos = getPosition(index);
     float3 deltaPos = float3(0,0,0);
     
     // calc projection for deltaPos
@@ -292,7 +292,7 @@ void ProjectConstraints(uint3 id:  SV_DispatchThreadID)
         uint nIndex = getIndex(nId);
         if(isValidateId(nId))
         {
-            float3 nPos = getPosition(nIndex);
+            float3 nPos = getPredicatePosition(nIndex);
             float3 curr2Neighbor = normalize(nPos - currPos);       // dir: if is p1-p2 then add(-)
             float3 springLength = length(nPos - currPos);
             // deltaPos += 0.5 * (springLength - d) * curr2Neighbor; 
@@ -300,7 +300,7 @@ void ProjectConstraints(uint3 id:  SV_DispatchThreadID)
             deltaPos += 0.5 * (springLength - d) * curr2Neighbor; 
         }
     }
-    prePos[index] += float4(deltaPos, 1);   // z = 0 or z = 1 ??? refer to affine transform.
+    prePos[index] += float4(deltaPos, 0);   // z = 0 or z = 1 ??? refer to affine transform.
 }
 
 [numthreads(THREAD_X,THREAD_Y,1)]

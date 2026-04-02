@@ -37,9 +37,12 @@ public class Cloth_PBD
 
     private static Material _material;
 
-    private static Material material{
-        get{
-            if(!_material){
+    private static Material material
+    {
+        get
+        {
+            if(!_material)
+            {
                 _material = new Material(Shader.Find("ClothSimulation/Unlit"));
             }
             return _material;
@@ -77,7 +80,8 @@ public class Cloth_PBD
     private int _groupX;
     private int _groupY;
 
-    public Cloth_PBD(){
+    public Cloth_PBD()
+    {
         _groupX = _vertexCountPerDim / THREAD_X;
         _groupY = _vertexCountPerDim / THREAD_Y;
     }
@@ -87,7 +91,8 @@ public class Cloth_PBD
         this.UpdateSimulateSetting();
     }
     
-    public void UpdateSimulateSetting(){
+    public void UpdateSimulateSetting()
+    {
         var viscousFluidArgs = (Vector4)_simulateSetting.wind;
         viscousFluidArgs.w = _simulateSetting.windMultiplyAtNormal;
         CS.SetVector("viscousFluidArgs",viscousFluidArgs);
@@ -99,7 +104,8 @@ public class Cloth_PBD
         CS.SetVector("collisionBall",ball);
     }
  
-    public AsyncGPUReadbackRequest Initialize(){
+    public AsyncGPUReadbackRequest Initialize()
+    {
         _kernelInitPara = CS.FindKernel("InitPara");
         _kernelApplyAndPredicate = CS.FindKernel("ApplyAndPredicate");
         _kernelProjectConstraints = CS.FindKernel("ProjectConstraints");
@@ -117,7 +123,6 @@ public class Cloth_PBD
         _velocitiesBuffer  = new ComputeBuffer(totalVertex,16);
         _normalBuffer      = new ComputeBuffer(totalVertex,16);
         _predicateBuffer   = new ComputeBuffer(totalVertex,16);
-        
 
         System.Action<int> setBufferForKernet = (k)=>
         {
@@ -194,7 +199,7 @@ public class Cloth_PBD
                 CS.SetFloat("deltaTime",minDt);
                 CS.Dispatch(_kernelApplyAndPredicate, _groupX, _groupY, 1);
                 // solver iteration
-                for (int i = 0; i < 3; i++)
+                for (int i = 0; i < 10; i++)
                 {
                     CS.Dispatch(_kernelProjectConstraints, _groupX, _groupY, 1);
                 }
@@ -210,7 +215,7 @@ public class Cloth_PBD
     {
         if (!_initialized)
         {
-            Debug.logger.Log("cloth not initialized");
+            Debug.unityLogger.Log("cloth not initialized");
             return;
         }
         

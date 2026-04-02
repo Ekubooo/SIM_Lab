@@ -190,7 +190,8 @@ static void detechBallCollision(uint2 id){
     }
 }
 
-static void stepVelocity(uint2 id){
+static void stepVelocity(uint2 id)
+{
     uint index = getIndex(id);
     float3 f = calculateF(id);
     float3 a = f * rcp(M);
