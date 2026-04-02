@@ -100,7 +100,8 @@ public class Cloth_PBD
         CS.SetFloat("mass",_simulateSetting.mass);
     }
 
-    public void UpdateBallParams(Vector4 ball){
+    public void UpdateBallParams(Vector4 ball)
+    {
         CS.SetVector("collisionBall",ball);
     }
  

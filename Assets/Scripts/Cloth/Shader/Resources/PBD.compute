@@ -1,6 +1,4 @@
-﻿#include "calcPBD.hlsl"
-
-#pragma kernel InitPara
+﻿#pragma kernel InitPara
 #pragma kernel ApplyAndPredicate
 #pragma kernel ProjectConstraints 
 #pragma kernel UpdateProperty
@@ -8,147 +6,53 @@
 RWStructuredBuffer<float4> positions;
 RWStructuredBuffer<float3> velocities;
 RWStructuredBuffer<float4> normals;
-RWStructuredBuffer<float4> prePos;      
+RWStructuredBuffer<float4> prePos;
 
 // x表示横向质点数量，y表示纵向质点数量,z = x * y
 uint4 size;
-
-// 弹性系数,xyz分别对应结构弹簧、剪力弹簧、弯曲弹簧
 float3 springKs;
-
-// restLengths
 uniform float3 restLengths;
-
-// mass for single point
 uniform float mass;
 
-// damping factor
 #define Cd 0.5
-
-// 流体(风)参数
 float4 viscousFluidArgs;
 #define Uf viscousFluidArgs.xyz
 #define Cv viscousFluidArgs.w
 
-// 单次迭代时间间隔
 float deltaTime;
 #define dt deltaTime
-
 #define totalParticleCount size.z
-
 #define L0 restLengths.x
 #define M mass
 
-
-// 球形碰撞体
 uniform float4 collisionBall;
 
-// GPU Setting
-static const int Group_Size = 256;
-
-float dampingFactor;    // not set
-float d;                // rest length, not set and incorrect yet.
-                        // length by spring type.
-
-//结构弹簧的4个方向
-static uint2 SpringDirs[12] = {
-    //结构力
-    {1,0},
-    {0,1},
-    {-1,0},
-    {0,-1},
-    //剪力
-    {-1,-1},
-    {-1,1},
-    {1,-1},
-    {1,1},
-    //弯矩力
-    {-2,0},
-    {2,0},
-    {0,2},
-    {0,-2},
+// 【修复】改为 int2 处理负方向
+static int2 SpringDirs[12] = 
+{
+    {1,0}, {0,1}, {-1,0}, {0,-1},          // 结构力
+    {-1,-1}, {-1,1}, {1,-1}, {1,1},        // 剪力
+    {-2,0}, {2,0}, {0,2}, {0,-2}           // 弯矩力
 };
-
 
 static uint getIndex(uint2 id){
     return id.y * size.x + id.x;
 }
 
-static float3 getPosition(uint index)
-{
-    return positions[index].xyz;
+static float3 getPosition(uint index){ return positions[index].xyz; }
+static float3 getPredicatePosition(uint index){ return prePos[index].xyz; }
+static float3 getPosition(uint2 id){ return positions[getIndex(id)].xyz; }
+static float3 getVelocity(uint index){ return velocities[index]; }
+static float3 getNormal(uint index){ return normals[index].xyz; }
+
+// 【修复】引入公用的布料固定点判断
+static bool isPinned(uint2 id){
+    return id.y == 0 && (id.x == 0 || id.x == size.x - 1);
 }
 
-static float3 getPredicatePosition(uint index)
-{
-    return prePos[index].xyz;
-}
-
-static float3 getPosition(uint2 id){
-    return positions[getIndex(id)].xyz;
-}
-
-static float3 getVelocity(uint index){
-    return velocities[index];
-}
-
-static float3 getNormal(uint index){
-    return normals[index].xyz;
-}
-
-static void setVelocity(uint index,float3 vel){
-    velocities[index] = vel;
-}
-
-static void setPosition(uint index,float3 pos){
-    positions[index] = float4(pos,1);
-}
-
-static bool isValidateId(uint2 id){
-    return id.x >= 0 && id.x < size.x && id.y >=0 && id.y < size.y;
-}
-
-//弹性力计算
-//springType 0,1,2分别代表结构弹簧、剪力弹簧、弯曲弹簧
-static float3 getSpring(float3 p,float3 q,uint springType){
-    float3 dp = p - q;
-    float len = length(dp);
-    float restL = restLengths[springType];
-    return dp * (springKs[springType] * (restL * rcp(len) - 1));
-}
-
-
-static float3 calculateF(uint2 id,float3 position,float3 velocity){
-    uint index = getIndex(id);
-    float3 f = float3(0,0,0);
-    //弹性力求和
-    for(uint i = 0; i < 12; i ++){
-        uint2 nId = id + SpringDirs[i];
-        uint nIndex = getIndex(nId);
-        if(isValidateId(nId)){
-            float3 nPos = getPosition(nIndex);
-            f += getSpring(position,nPos,i / 4);
-        }
-    }
-    //阻尼力
-    float3 fd = - Cd * velocity;
-    f += fd;
-
-    //重力
-    float3 fg = float3(0,-9.8,0) * M;
-    f += fg;
-
-    //模拟风力
-    float3 normal = getNormal(index);
-    float3 fv = Cv * (dot(normal,Uf - velocity)) * normal;
-    f += fv;
-
-    return f;
-}
-
-static float3 calculateF(uint2 id){
-    uint index = getIndex(id);
-    return calculateF(id,getPosition(index),getVelocity(index));
+// 【修复】严格安全的边界判断
+static bool isValidateId(int2 id){
+    return id.x >= 0 && id.x < (int)size.x && id.y >= 0 && id.y < (int)size.y;
 }
 
 static float3 calcExForce(uint2 id)
@@ -156,29 +60,17 @@ static float3 calcExForce(uint2 id)
     uint index = getIndex(id);
     float3 currVel = getVelocity(index);
     float3 f = float3(0,0,0);
-    
     // damping
-    float3 fd = - Cd * currVel;
-    f += fd;
-
+    f += -Cd * currVel;
     // gravity
-    float3 fg = float3(0,-9.8,0) * M;
-    f += fg;
-
+    f += float3(0, -9.8, 0) * M;
     // wind
     float3 normal = getNormal(index);
-    float3 fv = Cv * (dot(normal,Uf - currVel)) * normal;
-    f += fv;
+    f += Cv * (dot(normal, Uf - currVel)) * normal;
     return f;
 }
 
-
-static uint2 normalCompuDirs[4] = {
-    {1,0},
-    {0,1},
-    {-1,0},
-    {0,-1},
-};
+static int2 normalCompuDirs[4] = { {1,0}, {0,1}, {-1,0}, {0,-1} };
 
 static void updateNormal(uint2 id)
 {
@@ -187,73 +79,46 @@ static void updateNormal(uint2 id)
     for(uint i = 0; i < 4; i ++)
     {
         uint j = (i + 1) % 4;
-        uint2 id1 = id + normalCompuDirs[i];
-        uint2 id2 = id + normalCompuDirs[j];
+        // 【修复】转换为 int2 进行安全的坐标偏移
+        int2 id1 = (int2)id + normalCompuDirs[i];
+        int2 id2 = (int2)id + normalCompuDirs[j];
         if(isValidateId(id1) && isValidateId(id2))
         {
-            float3 p1 = getPosition(id1);
-            float3 p2 = getPosition(id2);
+            float3 p1 = getPosition((uint2)id1);
+            float3 p2 = getPosition((uint2)id2);
             float3 e1 = p1 - p;
             float3 e2 = p2 - p;
-            float3 n = normalize(cross(e1,e2));
-            normal += n;
+            normal += normalize(cross(e1,e2));
             break;
         }
     }
-    normal = normalize(normal);
-    normals[getIndex(id)] = float4(normal,0);
+    normals[getIndex(id)] = float4(normalize(normal),0);
 }
 
-static void detechBallCollision(uint2 id){
-    uint index = getIndex(id);
-    float3 pos = getPosition(index);
+// collision constrain on prePos
+static void solveCollision(uint index)
+{
+    float3 pos = prePos[index].xyz;
     float3 bCenter = collisionBall.xyz;
-    float bRaidus = collisionBall.w;
-    float disToBall = distance(pos,bCenter) - bRaidus;;
-    if(disToBall < 0){
+    float bRadius = collisionBall.w;
+    float disToBall = distance(pos, bCenter) - bRadius;
+    if(disToBall < 0)
+    {
         float3 e = normalize(pos - bCenter);
-        pos = pos - disToBall * e;
-
-        float3 v = getVelocity(index);
-
-        v = v - dot(v,e) * e;
-        setVelocity(index,v);
-        setPosition(index,pos);
-        
+        prePos[index] = float4(pos - disToBall * e, prePos[index].w);
     }
 }
-
-static void stepVelocity(uint2 id){
-    uint index = getIndex(id);
-    float3 f = calculateF(id);
-    float3 a = f * rcp(M);
-    float3 velocity = getVelocity(index);
-    velocity = velocity + a * dt;
-    velocities[index] = velocity;
-    updateNormal(id);
-}
-
-
-static void stepPosition(uint2 id){
-    uint index = getIndex(id);
-    float3 velocity = getVelocity(index);
-    float3 position = getPosition(index);
-    position += velocity * dt;
-    setPosition(index,position);
-
-    detechBallCollision(id);
-}
-
 
 #define THREAD_X 8
 #define THREAD_Y 8
 
-// new ////////////////////////////////////////////////
 [numthreads(THREAD_X,THREAD_Y,1)]
 void InitPara(uint3 id:  SV_DispatchThreadID)
 {   
-    uint index = getIndex(id.xy);    // incorrect of id.
-    positions[index] = float4(id.x * L0, 0, id.y * L0, 0);
+    uint index = getIndex(id.xy);
+    // [fix] when init, w must be 1，and init prePos to avoid frame 1 = NaN
+    positions[index] = float4(id.x * L0, 0, id.y * L0, 1.0);
+    prePos[index] = positions[index];
     velocities[index] = float3(0,0,0);
     normals[index] = float4(0,1,0,0);
 }
@@ -261,54 +126,60 @@ void InitPara(uint3 id:  SV_DispatchThreadID)
 [numthreads(THREAD_X,THREAD_Y,1)]
 void ApplyAndPredicate(uint3 id:  SV_DispatchThreadID)
 {
-    uint index = getIndex(id.xy);
+    if(isPinned(id.xy)) return; // 【修复】不预测固定点
     
-    // external force
-    float3 f = calcExForce(id);  // damping in it
+    uint index = getIndex(id.xy);
+    float3 f = calcExForce(id.xy);
     float3 a = f * rcp(M);
     float3 velocity = getVelocity(index) + a * dt;
     velocities[index] = velocity;
-    updateNormal(id);
+    updateNormal(id.xy);
     
-    // predicate
     prePos[index] = positions[index] + float4(velocities[index] * deltaTime, 0);
-    
-    // collision constraint;
-    // collision();
 }
 
 [numthreads(THREAD_X,THREAD_Y,1)]
 void ProjectConstraints(uint3 id:  SV_DispatchThreadID)
 {
-    uint index = getIndex(id.xy);
-    float3 currPos = getPosition(index);
-    float3 deltaPos = float3(0,0,0);
+    if(isPinned(id.xy)) return;     // [fix] no constrain on pin
     
-    // calc projection for deltaPos
-    // direction: gradient not required anymore, just get dir of spring.
+    uint index = getIndex(id.xy);
+    float3 currPos = getPredicatePosition(index);
+    float3 deltaPos = float3(0,0,0);
+    uint validCount = 0;    // [fix] take valid constrain counter
+    
     for(uint i = 0; i < 12; i ++)
     {
-        uint2 nId = id + SpringDirs[i];
-        uint nIndex = getIndex(nId);
+        int2 nId = (int2)id.xy + SpringDirs[i];
         if(isValidateId(nId))
         {
+            uint nIndex = getIndex((uint2)nId);
             float3 nPos = getPredicatePosition(nIndex);
-            float3 curr2Neighbor = normalize(nPos - currPos);       // dir: if is p1-p2 then add(-)
-            float3 springLength = length(nPos - currPos);
-            // deltaPos += 0.5 * (springLength - d) * curr2Neighbor; 
+            float3 curr2Neighbor = normalize(nPos - currPos);
+            float springLength = distance(nPos, currPos);
             float d = restLengths[i/4]; 
+            
             deltaPos += 0.5 * (springLength - d) * curr2Neighbor; 
+            validCount++;
         }
     }
-    prePos[index] += float4(deltaPos, 0);   // z = 0 or z = 1 ??? refer to affine transform.
+    
+    // [fix] clamp the delta pos to avoid explore, 1.5 is SOR 超松弛因子加速收敛
+    if(validCount > 0)
+    {
+        prePos[index] += float4(deltaPos / (float)validCount, 0) * 1.5; 
+    }
+
+    solveCollision(index);
 }
 
 [numthreads(THREAD_X,THREAD_Y,1)]
 void UpdateProperty(uint3 id:  SV_DispatchThreadID)
 {
-    if(id.y == 0 && (id.x == 0 || id.x == size.x - 1) ) return;     // pin
-    uint index = getIndex(id.xy);
+    if(isPinned(id.xy)) return;
     
-    velocities[index] = (prePos[index] - positions[index]) / deltaTime;
-    positions[index] = float4(prePos[index].xyz, 1);
+    uint index = getIndex(id.xy);
+    velocities[index] = (prePos[index].xyz - positions[index].xyz) / deltaTime;
+    // [fix] w === 1.0
+    positions[index] = float4(prePos[index].xyz, 1.0); 
 }
