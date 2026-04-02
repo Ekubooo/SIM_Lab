@@ -149,7 +149,8 @@ static uint2 normalCompuDirs[4] = {
     {0,-1},
 };
 
-static void updateNormal(uint2 id){
+static void updateNormal(uint2 id)
+{
     float3 p = getPosition(id);
     float3 normal = float3(0,0,0);
     for(uint i = 0; i < 4; i ++){
@@ -233,7 +234,8 @@ void StepV (uint3 id : SV_DispatchThreadID)
 [numthreads(THREAD_X,THREAD_Y,1)]
 void StepP (uint3 id : SV_DispatchThreadID)
 {
-    if(id.y == 0 && (id.x == 0 || id.x == size.x - 1) ){
+    if(id.y == 0 && (id.x == 0 || id.x == size.x - 1) )
+    {
         //pin two corner
         return;
     }

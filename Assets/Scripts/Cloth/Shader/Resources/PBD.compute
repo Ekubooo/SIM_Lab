@@ -74,8 +74,14 @@ static uint getIndex(uint2 id){
     return id.y * size.x + id.x;
 }
 
-static float3 getPosition(uint index){
+static float3 getPosition(uint index)
+{
     return positions[index].xyz;
+}
+
+static float3 getPredicatePosition(uint index)
+{
+    return prePos[index].xyz;
 }
 
 static float3 getPosition(uint2 id){
@@ -174,7 +180,8 @@ static uint2 normalCompuDirs[4] = {
     {0,-1},
 };
 
-static void updateNormal(uint2 id){
+static void updateNormal(uint2 id)
+{
     float3 p = getPosition(id);
     float3 normal = float3(0,0,0);
     for(uint i = 0; i < 4; i ++)
@@ -242,16 +249,16 @@ static void stepPosition(uint2 id){
 #define THREAD_Y 8
 
 // new ////////////////////////////////////////////////
-[numthreads(Group_Size,1,1)]
+[numthreads(THREAD_X,THREAD_Y,1)]
 void InitPara(uint3 id:  SV_DispatchThreadID)
 {   
     uint index = getIndex(id.xy);    // incorrect of id.
-    positions[index] = float4(id.x * L0,0,id.y * L0,0);
+    positions[index] = float4(id.x * L0, 0, id.y * L0, 0);
     velocities[index] = float3(0,0,0);
     normals[index] = float4(0,1,0,0);
 }
 
-[numthreads(Group_Size,1,1)]
+[numthreads(THREAD_X,THREAD_Y,1)]
 void ApplyAndPredicate(uint3 id:  SV_DispatchThreadID)
 {
     uint index = getIndex(id.xy);
@@ -270,11 +277,11 @@ void ApplyAndPredicate(uint3 id:  SV_DispatchThreadID)
     // collision();
 }
 
-[numthreads(Group_Size,1,1)]
+[numthreads(THREAD_X,THREAD_Y,1)]
 void ProjectConstraints(uint3 id:  SV_DispatchThreadID)
 {
     uint index = getIndex(id.xy);
-    float3 currPos = getPosition(index);
+    float3 currPos = getPredicatePosition(index);
     float3 deltaPos = float3(0,0,0);
     
     // calc projection for deltaPos
@@ -288,16 +295,20 @@ void ProjectConstraints(uint3 id:  SV_DispatchThreadID)
             float3 nPos = getPosition(nIndex);
             float3 curr2Neighbor = normalize(nPos - currPos);       // dir: if is p1-p2 then add(-)
             float3 springLength = length(nPos - currPos);
+            // deltaPos += 0.5 * (springLength - d) * curr2Neighbor; 
+            float d = restLengths[i/4]; 
             deltaPos += 0.5 * (springLength - d) * curr2Neighbor; 
         }
     }
-    prePos[index] += float4(deltaPos, 0);   // z = 0 or z = 1 ??? refer to affine transform.
+    prePos[index] += float4(deltaPos, 1);   // z = 0 or z = 1 ??? refer to affine transform.
 }
 
-[numthreads(Group_Size,1,1)]
+[numthreads(THREAD_X,THREAD_Y,1)]
 void UpdateProperty(uint3 id:  SV_DispatchThreadID)
 {
+    if(id.y == 0 && (id.x == 0 || id.x == size.x - 1) ) return;     // pin
     uint index = getIndex(id.xy);
+    
     velocities[index] = (prePos[index] - positions[index]) / deltaTime;
-    positions[index] = prePos[index];
+    positions[index] = float4(prePos[index].xyz, 1);
 }

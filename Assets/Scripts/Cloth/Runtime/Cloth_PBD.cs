@@ -160,8 +160,10 @@ public class Cloth_PBD
         var quadCount = (vertexCount - 1) * (vertexCount - 1);
         _indexBuffer = new GraphicsBuffer( GraphicsBuffer.Target.Index, quadCount * 6, sizeof( int ) );
         int[] indicies = new int[_indexBuffer.count];
-        for(var x = 0; x < vertexCount - 1; x ++){
-            for(var y = 0; y < vertexCount - 1; y ++){
+        for(var x = 0; x < vertexCount - 1; x ++)
+        {
+            for(var y = 0; y < vertexCount - 1; y ++)
+            {
                 var vertexIndex = (y * vertexCount + x);
                 var quadIndex = y * (vertexCount - 1) + x;
                 var upVertexIndex = (vertexIndex + vertexCount);
@@ -192,7 +194,7 @@ public class Cloth_PBD
                 CS.SetFloat("deltaTime",minDt);
                 CS.Dispatch(_kernelApplyAndPredicate, _groupX, _groupY, 1);
                 // solver iteration
-                for (int i = 0; i < 5; i++)
+                for (int i = 0; i < 3; i++)
                 {
                     CS.Dispatch(_kernelProjectConstraints, _groupX, _groupY, 1);
                 }
@@ -206,9 +208,12 @@ public class Cloth_PBD
 
     public void Draw()
     {
-        if(!_initialized){
+        if (!_initialized)
+        {
+            Debug.logger.Log("cloth not initialized");
             return;
         }
+        
         material.SetPass(0);
         Graphics.DrawProceduralNow(MeshTopology.Triangles,_indexBuffer,_indexBuffer.count,1);
     }
