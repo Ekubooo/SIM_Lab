@@ -463,8 +463,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Example_pbd
   _setting:
-    wind: {x: 0, y: 0, z: 10}
-    windMultiplyAtNormal: 0
+    wind: {x: 1, y: 1, z: 1}
+    windMultiplyAtNormal: 1
     springKs: {x: 25000, y: 25000, z: 25000}
     mass: 1
     stepTime: 0.003
