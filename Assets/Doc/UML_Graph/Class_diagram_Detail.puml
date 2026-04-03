@@ -1,0 +1,94 @@
+@startuml class
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam nodesep 60
+skinparam ranksep 70
+
+' --- Level 2: Core Static Helper ---
+class ComputeHelper <<static>> {
+    + defaultFilterMode: FilterMode
+    + defaultGraphicsFormat: GraphicsFormat
+    - argsBufferArray: uint[]
+    - singleInstanceRenderArgs: uint[]
+    + Dispatch(cs: ComputeShader, iterations: int, kernel: int): void
+    + CalculateThreadGroupCount1D(cs: ComputeShader, iterations: int, kernel: int): int
+    + CreateStructuredBuffer<T>(ref buffer: ComputeBuffer, count: int): void
+    + CreateRenderTexture(ref texture: RenderTexture, width: int, height: int, format: GraphicsFormat, filter: FilterMode): void
+    + SetBuffer(cs: ComputeShader, buffer: ComputeBuffer, id: string, kernels: int[]): void
+    + LoadComputeShader(name: string): ComputeShader
+    + ReadbackData<T>(buffer: ComputeBuffer, data: T[]): void
+    + Release(params buffers: ComputeBuffer[]): void
+}
+
+' --- Level 3: Intermediate Utilities ---
+class Scan {
+    - cs: ComputeShader
+    - freeBuffers: Dictionary<int, ComputeBuffer>
+    + Run(elements: ComputeBuffer): void
+    + Release(): void
+}
+
+' --- Level 4: Core Calculators ---
+class GPURadixSort {
+    - scan: Scan
+    - cs: ComputeShader
+    - sortedIndexBuffer: ComputeBuffer
+    - sortedKeyBuffer: ComputeBuffer
+    + Run(indexBuffer: ComputeBuffer, keysBuffer: ComputeBuffer): void
+    + Release(): void
+}
+
+class SpatialOffsetCalculator {
+    - cs: ComputeShader
+    + Run(needsInit: bool, sortedKeys: ComputeBuffer, offsets: ComputeBuffer): void
+}
+
+class GPUCountSort {
+    - scan: Scan
+    - cs: ComputeShader
+    - sortedItemsBuffer: ComputeBuffer
+    - countsBuffer: ComputeBuffer
+    + Run(itemsBuffer: ComputeBuffer, keysBuffer: ComputeBuffer, maxValue: uint): void
+    + Release(): void
+}
+
+' --- Level 5: High-level Application Classes ---
+class SHRadix {
+    + SpatialKeys: ComputeBuffer
+    + SpatialIndices: ComputeBuffer
+    + SpatialOffsets: ComputeBuffer
+    - gpuSort: GPURadixSort
+    - spatialOffsetsCalc: SpatialOffsetCalculator
+    + Resize(newSize: int): void
+    + Run(): void
+    + Release(): void
+    - CreateBuffers(count: int): void
+}
+
+class SpatialHash {
+    + SpatialKeys: ComputeBuffer
+    + SpatialIndices: ComputeBuffer
+    + SpatialOffsets: ComputeBuffer
+    - gpuSort: GPUCountSort
+    - spatialOffsetsCalc: SpatialOffsetCalculator
+    + Resize(newSize: int): void
+    + Run(): void
+    + Release(): void
+    - CreateBuffers(count: int): void
+}
+
+' --- Dependencies ---
+Scan -up-> ComputeHelper
+GPURadixSort -up-> ComputeHelper
+GPURadixSort -up-> Scan
+SpatialOffsetCalculator -up-> ComputeHelper
+GPUCountSort -up-> ComputeHelper
+GPUCountSort -up-> Scan
+SHRadix -up-> GPURadixSort
+SHRadix -up-> SpatialOffsetCalculator
+SHRadix -up-> ComputeHelper
+SpatialHash -up-> GPUCountSort
+SpatialHash -up-> SpatialOffsetCalculator
+SpatialHash -up-> ComputeHelper
+
+@enduml

@@ -1,0 +1,24 @@
+@startuml Use_Case
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Developer / System Module" as User
+
+rectangle "Helpers Module (GPU Computation)" {
+  usecase "Manage Shaders & Buffers" as UC1
+  usecase "Perform GPU Sorting" as UC2
+  usecase "Calculate Prefix Sum (Scan)" as UC3
+  usecase "Generate Spatial Hash" as UC4
+}
+
+User --> UC1
+User --> UC2
+User --> UC3
+User --> UC4
+
+' Sorting algorithms internally use the Scan (Prefix Sum) calculation
+UC2 ..> UC3 : <<include>>
+' Spatial Hash generation internally requires sorting the data
+UC4 ..> UC2 : <<include>>
+
+@enduml

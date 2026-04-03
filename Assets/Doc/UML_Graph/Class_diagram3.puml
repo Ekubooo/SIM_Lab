@@ -1,0 +1,104 @@
+@startuml class
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam nodesep 50
+skinparam ranksep 60
+
+class ComputeHelper <<static>> {
+    + defaultFilterMode: FilterMode
+    + defaultGraphicsFormat: GraphicsFormat
+    - argsBufferArray: uint[]
+    - singleInstanceRenderArgs: uint[]
+    + Dispatch(cs, numIterations, kernelIndex)
+    + CalculateThreadGroupCount1D(cs, numIterations, kernel)
+    + CreateStructuredBuffer(buffer, count)
+    + CreateRenderTexture(texture, template)
+    + SetBuffer(cs, buffer, id)
+    + LoadComputeShader(name): ComputeShader
+    + ReadbackData(buffer): T[]
+    + Release(buffers)
+}
+
+class Scan {
+    - cs: ComputeShader
+    - freeBuffers: Dictionary<int, ComputeBuffer>
+    + Run(elements: ComputeBuffer)
+    + Release()
+}
+
+class SHOCRadix {
+    - cs: ComputeShader
+    + Run(needsInit, sortedKeys, offsets)
+}
+
+class GPURadixSort {
+    - scan: Scan
+    - cs: ComputeShader
+    - sortedIndexBuffer: ComputeBuffer
+    - sortedKeyBuffer: ComputeBuffer
+    + Run(indexBuffer, keysBuffer)
+    + Release()
+}
+
+class SpatialOffsetCalculator {
+    - cs: ComputeShader
+    + Run(needsInit, sortedKeys, offsets)
+}
+
+class GPUCountSort {
+    - scan: Scan
+    - cs: ComputeShader
+    - sortedItemsBuffer: ComputeBuffer
+    - countsBuffer: ComputeBuffer
+    + Run(itemsBuffer, keysBuffer, maxValue)
+    + Release()
+}
+
+class SHRadix {
+    + SpatialKeys: ComputeBuffer
+    + SpatialIndices: ComputeBuffer
+    + SpatialOffsets: ComputeBuffer
+    - gpuSort: GPURadixSort
+    - spatialOffsetsCalc: SpatialOffsetCalculator
+    + Resize(newSize: int)
+    + Run()
+    + Release()
+    - CreateBuffers(count: int)
+}
+
+class SpatialHash {
+    + SpatialKeys: ComputeBuffer
+    + SpatialIndices: ComputeBuffer
+    + SpatialOffsets: ComputeBuffer
+    - gpuSort: GPUCountSort
+    - spatialOffsetsCalc: SpatialOffsetCalculator
+    + Resize(newSize: int)
+    + Run()
+    + Release()
+    - CreateBuffers(count: int)
+}
+
+' ==========================================
+' Dependency Links representing the Rider Diagram
+' ==========================================
+
+Scan -up-> ComputeHelper : uses
+SHOCRadix -up-> ComputeHelper : uses
+
+GPURadixSort -up-> ComputeHelper : uses
+GPURadixSort -up-> Scan : uses
+
+SpatialOffsetCalculator -up-> ComputeHelper : uses
+
+GPUCountSort -up-> ComputeHelper : uses
+GPUCountSort -up-> Scan : uses
+
+SHRadix -up-> GPURadixSort : uses
+SHRadix -up-> SpatialOffsetCalculator : uses
+SHRadix -up-> ComputeHelper : uses
+
+SpatialHash -up-> GPUCountSort : uses
+SpatialHash -up-> SpatialOffsetCalculator : uses
+SpatialHash -up-> ComputeHelper : uses
+
+@enduml

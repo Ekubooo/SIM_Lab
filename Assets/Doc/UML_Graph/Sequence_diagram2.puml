@@ -1,0 +1,64 @@
+@startuml Sequence2
+actor Developer
+participant "sh : SpatialHash" as SH
+participant "gpuSort : GPUCountSort" as Sort
+participant "ComputeHelper" as CH <<static>>
+participant "scan : Scan" as Scan
+participant "spatialOffsetsCalc : SpatialOffsetCalculator" as SOC
+
+Developer -> SH : Run()
+activate SH
+
+note over SH, Sort : 步骤1：运行计数排序算法
+SH -> Sort : Run(SpatialIndices, SpatialKeys, maxValue)
+activate Sort
+
+Sort -> CH : Dispatch(cs, count, ClearCountsKernel)
+activate CH
+CH --> Sort
+deactivate CH
+
+Sort -> CH : Dispatch(cs, count, CountKernel)
+activate CH
+CH --> Sort
+deactivate CH
+
+note right of Sort : 计算计数数组的前缀和
+Sort -> Scan : Run(countsBuffer)
+activate Scan
+Scan --> Sort : Execution Complete
+deactivate Scan
+
+Sort -> CH : Dispatch(cs, count, ScatterOutputsKernel)
+activate CH
+CH --> Sort
+deactivate CH
+
+Sort -> CH : Dispatch(cs, count, CopyBackKernel)
+activate CH
+CH --> Sort
+deactivate CH
+
+Sort --> SH : GPUCountSort Complete
+deactivate Sort
+
+note over SH, SOC : 步骤2：计算空间偏移量
+SH -> SOC : Run(true, SpatialKeys, SpatialOffsets)
+activate SOC
+
+SOC -> CH : Dispatch(cs, count, initKernel)
+activate CH
+CH --> SOC
+deactivate CH
+
+SOC -> CH : Dispatch(cs, count, offsetsKernel)
+activate CH
+CH --> SOC
+deactivate CH
+
+SOC --> SH : Offsets Calculated
+deactivate SOC
+
+SH --> Developer : Execution Complete
+deactivate SH
+@enduml
