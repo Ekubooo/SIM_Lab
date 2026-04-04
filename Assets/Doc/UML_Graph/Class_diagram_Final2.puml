@@ -1,0 +1,59 @@
+@startuml class
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam nodesep 50
+skinparam ranksep 60
+
+' --- Level 2: Core Static Helper ---
+class ComputeHelper <<static>> {
+    + defaultFilterMode: FilterMode
+    + defaultGraphicsFormat: GraphicsFormat
+    - argsBufferArray: uint[]
+    - singleInstanceRenderArgs: uint[]
+    + Dispatch()
+    + CalculateThreadGroupCount1D()
+    + CreateStructuredBuffer()
+    + CreateRenderTexture()
+    + SetBuffer()
+    + LoadComputeShader()
+    + ReadbackData()
+    + Release()
+}
+
+' --- Level 3: Intermediate Utilities ---
+class Scan {
+    - cs: ComputeShader
+    - freeBuffers: Dictionary
+    + Run()
+    + Release()
+}
+
+' --- Level 4: Core Calculators ---
+class GPURadixSort {
+    - scan: Scan
+    - cs: ComputeShader
+    - sortedIndexBuffer: ComputeBuffer
+    - sortedKeyBuffer: ComputeBuffer
+    + Run()
+    + Release()
+}
+
+class GPUCountSort {
+    - scan: Scan
+    - cs: ComputeShader
+    - sortedItemsBuffer: ComputeBuffer
+    - countsBuffer: ComputeBuffer
+    + Run()
+    + Release()
+}
+
+
+' --- Dependencies ---
+Scan -up-> ComputeHelper
+GPURadixSort -up-> ComputeHelper
+GPURadixSort -up-> Scan
+GPUCountSort -up-> ComputeHelper
+GPUCountSort -up-> Scan
+
+
+@enduml

@@ -1,10 +1,10 @@
 @startuml Sequence3
 actor Developer
-participant "shRadix : SHRadix" as SH
-participant "gpuSort : GPURadixSort" as Sort
+participant "SpecialHash" as SH
+participant "GPURadixSort" as Sort
 participant "ComputeHelper" as CH <<static>>
-participant "scan : Scan" as Scan
-participant "spatialOffsetsCalc : SpatialOffsetCalculator" as SOC
+participant "Scan" as Scan
+participant "SpatialOffsetCalculator" as SOC
 
 Developer -> SH : Run()
 activate SH
@@ -15,7 +15,7 @@ activate Sort
 
 loop 8 times (For i = 0 to 7)
     note right of Sort : Local radix sorting computation within a block.
-    Sort -> CH : Dispatch(cs, count, InBlockKernel)
+    Sort -> CH : Dispatch()
     activate CH
     CH --> Sort
     deactivate CH
@@ -27,7 +27,7 @@ loop 8 times (For i = 0 to 7)
     deactivate Scan
 
     note right of Sort : Global Scatter allocation
-    Sort -> CH : Dispatch(cs, count, GScatterKernel)
+    Sort -> CH : Dispatch()
     activate CH
     CH --> Sort
     deactivate CH
@@ -42,12 +42,12 @@ note over SH, SOC : Step 2: Calculate the spatial offset
 SH -> SOC : Run(true, SpatialKeys, SpatialOffsets)
 activate SOC
 
-SOC -> CH : Dispatch(cs, count, initKernel)
+SOC -> CH : Dispatch()
 activate CH
 CH --> SOC
 deactivate CH
 
-SOC -> CH : Dispatch(cs, count, offsetsKernel)
+SOC -> CH : Dispatch()
 activate CH
 CH --> SOC
 deactivate CH
