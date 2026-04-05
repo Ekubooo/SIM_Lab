@@ -10,22 +10,21 @@ public class GPURadixSortTests
     [Test]
     public void RadixSort_LargeRandomData_IsCorrectAndFast()
     {
-        // 1. Arrange: 准备海量数据 (例如 256K 个粒子)
-        // 保证是 1024 的倍数，展示你们的对齐策略
+        // 1. Arrange: 256K particles
         int count = 1024 * 256; 
         
         uint[] keysCpu = new uint[count];
         uint[] indicesCpu = new uint[count];
-        System.Random rnd = new System.Random(42); // 固定种子保证每次测试一样
+        System.Random rnd = new System.Random(42); 
 
         for (int i = 0; i < count; i++)
         {
-            keysCpu[i] = (uint)rnd.Next(0, 10000); // 模拟空间哈希值
-            indicesCpu[i] = (uint)i;               // 模拟粒子原始索引
+            keysCpu[i] = (uint)rnd.Next(0, 10000); 
+            indicesCpu[i] = (uint)i;               
         }
 
-        // 使用 CPU 计算标准答案 (Oracle)
-        // 使用 Stopwatch 顺便测一下 CPU 排序的时间作为对比
+        // CPU calculate (Oracle)
+            // Stopwatch as a timer
         Stopwatch cpuTimer = Stopwatch.StartNew();
         var expectedSorted = keysCpu
             .Select((k, i) => new { Key = k, Index = indicesCpu[i] })
@@ -36,7 +35,7 @@ public class GPURadixSortTests
         // UnityEngine.Debug.Log($"[CPU 排序耗时] {cpuTimer.ElapsedMilliseconds} ms");
         UnityEngine.Debug.Log($"[CPU Sorting time] {cpuTimer.ElapsedMilliseconds} ms");
 
-        // 准备 GPU 数据
+        // Init GPU data 
         ComputeBuffer keysBuffer = new ComputeBuffer(count, sizeof(uint));
         ComputeBuffer indicesBuffer = new ComputeBuffer(count, sizeof(uint));
         keysBuffer.SetData(keysCpu);
@@ -44,19 +43,19 @@ public class GPURadixSortTests
 
         GPURadixSort sorter = new GPURadixSort();
 
-        // 2. Act: 执行 GPU 排序并计时
-        // 先跑一次热身 (Warmup)，编译 Shader 会消耗时间，不计入正式成绩
+        // 2. Act: run GPU sorting
+        // Warmup for compling Shader
         sorter.Run(indicesBuffer, keysBuffer); 
         
-        // 重新填入乱序数据进行正式计时测试
+        // refill the unorder data 
         keysBuffer.SetData(keysCpu);
         indicesBuffer.SetData(indicesCpu);
 
         Stopwatch gpuTimer = Stopwatch.StartNew();
         
-        sorter.Run(indicesBuffer, keysBuffer); // 派发 GPU 任务
+        sorter.Run(indicesBuffer, keysBuffer); // GPU Sorting
         
-        // 3. 回读数据 (极其关键：GetData 会阻塞 CPU 直到 GPU 完成，这样计得的时间才真实)
+        // 3. read back  (Crucially: GetData will block the CPU until the GPU completes)
         uint[] keysGpu = new uint[count];
         uint[] indicesGpu = new uint[count];
         keysBuffer.GetData(keysGpu);
@@ -68,7 +67,7 @@ public class GPURadixSortTests
         UnityEngine.Debug.Log($"[GPU Sorting time] {gpuTimer.ElapsedMilliseconds} ms");
         
 
-        // 4. Assert: 验证正确性
+        // 4. Assert
         for (int i = 0; i < count; i++)
         {
             Assert.AreEqual(expectedSorted[i].Key, keysGpu[i], $"哈希值排序错误于索引 {i}");
@@ -78,7 +77,7 @@ public class GPURadixSortTests
             // Assert.AreEqual(expectedSorted[i].Index, indicesGpu[i], $"索引匹配错误于 {i}");
         }
 
-        // 5. 清理显存
+        // 5. clear mem
         keysBuffer.Release();
         indicesBuffer.Release();
         sorter.Release();
